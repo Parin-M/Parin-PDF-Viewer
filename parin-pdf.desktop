@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Parin PDF Viewer
+Comment=PDF Viewer with Annotation Tools
+Exec=/usr/bin/parin-pdf
+Terminal=false
+Type=Application
+Categories=Office;Viewer;
