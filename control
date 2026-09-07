@@ -3,6 +3,6 @@ Version: 6.0
 Section: utils
 Priority: optional
 Architecture: all
-Maintainer: Parin <parin@example.com>
+Maintainer: Parin 
 Depends: python3
 Description: Parin PDF Viewer with annotation tools
