@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Parin
+Name[fa]=پرین
+Comment=Modern PDF workspace
+Comment[fa]=محیط مدرن کار با فایل‌های PDF
+Exec=parin-pdf %U
+Icon=parin-pdf
+Terminal=false
+Type=Application
+Categories=Office;Viewer;Graphics;
+MimeType=application/pdf;
+StartupWMClass=ParinPDF;
