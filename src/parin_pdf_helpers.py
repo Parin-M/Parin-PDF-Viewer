@@ -6,7 +6,7 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
-APP_VERSION = "8.9.0"
+APP_VERSION = "9.0.0"
 RECENT_FILES_LIMIT = 10
 
 
