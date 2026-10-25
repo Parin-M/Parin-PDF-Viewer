@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QLineEdit, QScrollArea, 
     QInputDialog, QMessageBox, QMenu, QColorDialog, QSpinBox, QDialog, QCheckBox,
     QComboBox, QSlider, QTabWidget, QFormLayout, QGroupBox, QDialogButtonBox,
-    QRadioButton, QButtonGroup, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QDockWidget, QStackedWidget, QFrame, QToolButton, QSizePolicy, QStyle, QGraphicsOpacityEffect
+    QRadioButton, QButtonGroup, QAbstractItemView, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QDockWidget, QStackedWidget, QFrame, QToolButton, QSizePolicy, QStyle, QGraphicsOpacityEffect
 )
 from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -46,6 +46,8 @@ for _lang, _items in TRANSLATIONS.items():
         if isinstance(_value, str): _items[_key] = clean_label(_value)
     if isinstance(_items.get('title'), str):
         _items['title'] = re.sub(r'v\d+\.\d+(?:\.\d+)?', f"v{'.'.join(APP_VERSION.split('.')[:2])}", _items['title'])
+
+ABOUT_ATTRIBUTION = "This project was created by Parin Mashalchian and ChatGPT also contributed to this project."
 
 LOFI_STREAM_URL = "https://stream.zeno.fm/f3wvbbqmdg8uv"
 
@@ -145,6 +147,7 @@ class PDFPageLabel(QLabel):
             self.viewer.is_drawing = True
 
         elif self.viewer.active_tool == 'eraser':
+            self.viewer._record_undo()
             self.viewer.erase_at_point(page, pdf_pt)
 
         elif self.viewer.active_tool == 'text':
@@ -152,6 +155,7 @@ class PDFPageLabel(QLabel):
             text, ok = QInputDialog.getText(self, t["add_text"], t["enter_text"])
             if ok and text:
                 r, g, b = self.viewer.selected_color.redF(), self.viewer.selected_color.greenF(), self.viewer.selected_color.blueF()
+                self.viewer._record_undo()
                 annot = page.add_freetext_annot(fitz.Rect(pdf_pt.x, pdf_pt.y, pdf_pt.x + 200, pdf_pt.y + 30), text, fontsize=12, text_color=(r, g, b))
                 annot.update()
                 self.viewer.mark_document_modified()
@@ -175,6 +179,7 @@ class PDFPageLabel(QLabel):
             page = self.viewer.doc.load_page(self.viewer.current_page)
             r, g, b = self.viewer.selected_color.redF(), self.viewer.selected_color.greenF(), self.viewer.selected_color.blueF()
 
+            self.viewer._record_undo()
             annot = page.add_ink_annot([self.current_stroke])
             annot.set_colors(stroke=(r, g, b))
             
@@ -275,6 +280,23 @@ for _code, _vals in SETTINGS_SECTION_LOCALES.items():
 for _l,_v in _SETTINGS_LOCALIZED.items():
     SETTINGS_I18N.setdefault(_l,dict(SETTINGS_I18N['en'])); SETTINGS_I18N[_l].update(_v)
 
+
+_ABOUT_LOCALIZED = {
+ 'en': {'about':'About','version':'Version','repository':'GitHub repository','license':'License','copy_version':'Copy version'},
+ 'fa': {'about':'درباره','version':'نسخه','repository':'مخزن گیت‌هاب','license':'مجوز','copy_version':'کپی نسخه'},
+ 'da': {'about':'Om','version':'Version','repository':'GitHub-projekt','license':'Licens','copy_version':'Kopiér version'},
+ 'de': {'about':'Über','version':'Version','repository':'GitHub-Repository','license':'Lizenz','copy_version':'Version kopieren'},
+ 'es': {'about':'Acerca de','version':'Versión','repository':'Repositorio de GitHub','license':'Licencia','copy_version':'Copiar versión'},
+ 'no': {'about':'Om','version':'Versjon','repository':'GitHub-repositorium','license':'Lisens','copy_version':'Kopier versjon'},
+ 'fi': {'about':'Tietoja','version':'Versio','repository':'GitHub-tietovarasto','license':'Lisenssi','copy_version':'Kopioi versio'},
+ 'sv': {'about':'Om','version':'Version','repository':'GitHub-arkiv','license':'Licens','copy_version':'Kopiera version'},
+ 'fr': {'about':'À propos','version':'Version','repository':'Dépôt GitHub','license':'Licence','copy_version':'Copier la version'},
+ 'el': {'about':'Πληροφορίες','version':'Έκδοση','repository':'Αποθετήριο GitHub','license':'Άδεια','copy_version':'Αντιγραφή έκδοσης'},
+ 'ar': {'about':'حول','version':'الإصدار','repository':'مستودع GitHub','license':'الترخيص','copy_version':'نسخ الإصدار'}
+}
+for _code, _values in _ABOUT_LOCALIZED.items():
+    SETTINGS_I18N.setdefault(_code, dict(SETTINGS_I18N['en'])).update(_values)
+
 # Settings labels are plain text; icons are supplied by the UI where needed.
 for _code, _items in SETTINGS_I18N.items():
     for _key, _value in list(_items.items()):
@@ -293,7 +315,7 @@ class SettingsDialog(QDialog):
         root=QVBoxLayout(self); root.setContentsMargins(18,18,18,18); root.setSpacing(14)
         header=QFrame(); header.setObjectName('settingsHeader'); hl=QHBoxLayout(header); hl.setContentsMargins(20,16,20,16); ic=QLabel(); ic.setPixmap(make_app_icon(58).pixmap(58,58)); hl.addWidget(ic); tb=QVBoxLayout(); self.title=QLabel(); self.title.setObjectName('settingsTitle'); self.subtitle=QLabel(); self.subtitle.setObjectName('settingsSubtitle'); self.subtitle.setWordWrap(True); tb.addWidget(self.title); tb.addWidget(self.subtitle); hl.addLayout(tb,1); self.live_chip=QLabel(); self.live_chip.setObjectName('settingsChip'); hl.addWidget(self.live_chip); root.addWidget(header)
         body=QHBoxLayout(); body.setSpacing(14); self.nav=QListWidget(); self.nav.setObjectName('settingsNav'); self.nav.setFixedWidth(255); body.addWidget(self.nav); self.stack=QStackedWidget(); body.addWidget(self.stack,1); root.addLayout(body,1)
-        self.card_titles=[]; self._build_overview(); self._build_appearance(); self._build_eye(); self._build_document(); self._build_performance(); self._build_audio(); self._build_shortcuts(); self.nav.currentRowChanged.connect(self._switch_page)
+        self.card_titles=[]; self._build_overview(); self._build_appearance(); self._build_eye(); self._build_document(); self._build_performance(); self._build_audio(); self._build_shortcuts(); self._build_about(); self.nav.currentRowChanged.connect(self._switch_page)
         foot=QHBoxLayout(); self.reset_btn=QPushButton(); self.reset_btn.clicked.connect(self.reset_defaults); foot.addWidget(self.reset_btn); foot.addStretch(); self.lang_combo=QComboBox(); self.lang_combo.addItems(['English','فارسی','Dansk','Deutsch','Español','Norsk','Suomi','Svenska','Français','Ελληνικά','العربية']); self.lang_combo.currentIndexChanged.connect(self._language_from_settings); foot.addWidget(self.lang_combo); self.buttons=QDialogButtonBox(QDialogButtonBox.Cancel|QDialogButtonBox.Apply|QDialogButtonBox.Ok); self.buttons.rejected.connect(self.reject); self.buttons.button(QDialogButtonBox.Apply).clicked.connect(self.apply_changes); self.buttons.accepted.connect(self.accept); foot.addWidget(self.buttons); root.addLayout(foot); self.nav.setCurrentRow(0)
     def _page(self):
         # Each settings page owns a real scroll area with an explicitly sized
@@ -342,8 +364,28 @@ class SettingsDialog(QDialog):
         w,l=self._page(); f=self._card(l,'Audio'); self.audio_enabled=self._check(f,'','audio_enabled'); self.autoplay=self._check(f,'','autoplay'); self.volume_title=QLabel(); f.addWidget(self.volume_title); row=QHBoxLayout(); self.volume=QSlider(Qt.Horizontal); self.volume.setRange(0,100); self.volume.setValue(int(self.settings.get('volume',50))); self.volume_value=QLabel('50%'); row.addWidget(self.volume,1); row.addWidget(self.volume_value); f.addLayout(row); self.volume.valueChanged.connect(lambda v:self.volume_value.setText(f'{v}%')); l.addStretch(); self.stack.addWidget(w)
     def _build_shortcuts(self):
         w,l=self._page(); f=self._card(l,'Keyboard shortcuts'); self.shortcut_text=QLabel(); self.shortcut_text.setWordWrap(True); f.addWidget(self.shortcut_text); l.addStretch(); self.stack.addWidget(w)
+    def _build_about(self):
+        w,l=self._page()
+        f=self._card(l,'About','Application information and project credits.')
+        self.about_version=QLabel()
+        self.about_version.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        f.addWidget(self.about_version)
+        self.about_credit=QLabel(ABOUT_ATTRIBUTION)
+        self.about_credit.setWordWrap(True)
+        self.about_credit.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        f.addWidget(self.about_credit)
+        self.about_repo=QLabel()
+        self.about_repo.setOpenExternalLinks(True)
+        f.addWidget(self.about_repo)
+        self.about_license=QLabel()
+        f.addWidget(self.about_license)
+        self.about_copy_version=QPushButton()
+        self.about_copy_version.clicked.connect(lambda: QApplication.clipboard().setText(APP_VERSION))
+        f.addWidget(self.about_copy_version)
+        l.addStretch()
+        self.stack.addWidget(w)
     def _retranslate(self):
-        self.t=SETTINGS_I18N.get(self.lang,SETTINGS_I18N['en']); self.title.setText(self.t['title']); self.subtitle.setText(self.t['subtitle']); self.live_chip.setText(self.t.get('live','● Live preview')); self.nav.clear(); self.nav.addItems([self.t['overview'],self.t['appearance'],self.t['eye'],self.t['document'],self.t['performance'],self.t['audio'],self.t['shortcuts']]);
+        self.t=SETTINGS_I18N.get(self.lang,SETTINGS_I18N['en']); self.title.setText(self.t['title']); self.subtitle.setText(self.t['subtitle']); self.live_chip.setText(self.t.get('live','● Live preview')); self.nav.clear(); self.nav.addItems([self.t['overview'],self.t['appearance'],self.t['eye'],self.t['document'],self.t['performance'],self.t['audio'],self.t['shortcuts'],self.t['about']]);
         _cards={
             'en':['General','Workspace','Theme Studio','Eye Comfort','Reading','Performance','Audio','Keyboard shortcuts'],
             'fa':['عمومی','محیط کار','استودیو تم','راحتی چشم','مطالعه','عملکرد','صدا','میانبرهای صفحه‌کلید'],
@@ -356,10 +398,13 @@ class SettingsDialog(QDialog):
             'sv':['Allmänt','Arbetsyta','Teman','Ögonkomfort','Läsning','Prestanda','Ljud','Genvägar'],
             'el':['Γενικά','Χώρος εργασίας','Θέματα','Άνεση ματιών','Ανάγνωση','Απόδοση','Ήχος','Συντομεύσεις'],
             'ar':['عام','مساحة العمل','استوديو السمات','راحة العين','القراءة','الأداء','الصوت','الاختصارات']}
+        _about_titles={'en':'About','fa':'درباره','de':'Über','es':'Acerca de','fr':'À propos','da':'Om','no':'Om','fi':'Tietoja','sv':'Om','el':'Πληροφορίες','ar':'حول'}
+        for _code,_label in _about_titles.items():
+            if _code in _cards: _cards[_code].append(_label)
         _ct=_cards.get(self.lang,_cards['en'])
         for _lab,_txt in zip(self.card_titles,_ct):
             if _lab is not None: _lab.setText(_txt); _lab.setVisible(True)
-        self.language_label.setText(self.t.get('language','Interface language')); self._set_texts(); self.reset_btn.setText(self.t['reset']); self.buttons.button(QDialogButtonBox.Cancel).setText(self.t['cancel']); self.buttons.button(QDialogButtonBox.Apply).setText(self.t['apply']); self.buttons.button(QDialogButtonBox.Ok).setText(self.t['ok']); codes=['en','fa','da','de','es','no','fi','sv','fr','el','ar']; self.lang_combo.blockSignals(True); self.lang_combo.setCurrentIndex(codes.index(self.lang)); self.lang_combo.blockSignals(False); self.nav.setCurrentRow(min(self.nav.currentRow(),6)); self._apply_dialog_style()
+        self.language_label.setText(self.t.get('language','Interface language')); self._set_texts(); self.about_version.setText(f"{self.t.get('version','Version')} {APP_VERSION}"); self.about_credit.setText(ABOUT_ATTRIBUTION); self.about_repo.setText(f"<a href='https://github.com/Parin-M/Parin-PDF-Viewer'>{self.t.get('repository','GitHub repository')}</a>"); self.about_license.setText(f"{self.t.get('license','License')}: GPL-3.0"); self.about_copy_version.setText(self.t.get('copy_version','Copy version')); self.reset_btn.setText(self.t['reset']); self.buttons.button(QDialogButtonBox.Cancel).setText(self.t['cancel']); self.buttons.button(QDialogButtonBox.Apply).setText(self.t['apply']); self.buttons.button(QDialogButtonBox.Ok).setText(self.t['ok']); codes=['en','fa','da','de','es','no','fi','sv','fr','el','ar']; self.lang_combo.blockSignals(True); self.lang_combo.setCurrentIndex(codes.index(self.lang)); self.lang_combo.blockSignals(False); self.nav.setCurrentRow(min(self.nav.currentRow(),7)); self._apply_dialog_style()
     def _set_texts(self):
         t=self.t; self.remember_last.setText(t['remember']); self.restore_zoom.setText(t['restore']); self.single_page.setText(t.get('single','Single-page reading mode')); self.confirm_close.setText(t['confirm']); self.status.setText(t['status']); self.center_page.setText(t['center']); self.page_shadow.setText(t['shadow']); self.theme_label.setText(t['theme']); self.accent_label.setText(t['accent']); self.aero.setText(t['aero']); self.large.setText(t['large']); self.show_icons.setText(t['toolbar']); self.compact.setText(t['compact']); self.animations.setText(t['animations']); self.theme_preview.setText(t.get('theme_preview','Material You Light • Live preview')); self.blue.setText(t['blue']); self.blue_label_title.setText(t['blue_strength']); self.warm.setText(t['night']); self.reduce_motion.setText(t['reduce']); self.contrast_label_title.setText(t['contrast']); self.fit.setItemText(0,t.get('fit_width','Fit Width')); self.fit.setItemText(1,t.get('fit_page','Fit Page')); self.fit.setItemText(2,t.get('fit_100','100%')); self.auto_fit.setText(t['autofit']); self.smooth_scroll.setText(t['scroll']); self.page_gap.setText(t['gap']); self.cache_pages.setText(t['cache']); self.smooth_render.setText(t.get('quality_render','High-quality rendering')); self.preload.setText(t['preload']); self.gpu.setText(t['gpu']); self.low_memory.setText(t['memory']); self.large_files.setText(t.get('large_files','Large PDF mode: pages are rendered on demand; the whole document is never loaded into RAM.')); self.audio_enabled.setText(t['audio_enabled']); self.autoplay.setText(t['autoplay']); self.volume_title.setText(t['volume']); self.shortcut_text.setText(t['shortcuts_desc']+'\n\nCtrl+O  '+t.get('open','Open')+'\nCtrl+S  '+t.get('save','Save')+'\nCtrl+F  '+t.get('search','Search')+'\nCtrl+0  '+t.get('reset_zoom','Reset zoom')+'\nF11  '+t.get('fullscreen','Fullscreen'))
     def _language_from_settings(self,index):
@@ -421,6 +466,119 @@ NAVIGATION_I18N = {
 }
 
 
+
+class PageOrganizerDialog(QDialog):
+    """Transactional page organizer with drag/drop reorder, rotation, removal, and extraction."""
+    def __init__(self, viewer):
+        super().__init__(viewer)
+        self.viewer = viewer
+        self.rotations = {}
+        self.setWindowTitle("Manage PDF pages")
+        self.resize(520, 620)
+        self.setModal(True)
+        root = QVBoxLayout(self)
+        intro = QLabel("Drag pages to reorder them. Rotate, remove, or extract selected pages; changes apply only when you choose Apply.")
+        intro.setWordWrap(True)
+        root.addWidget(intro)
+        self.pages = QListWidget()
+        self.pages.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.pages.setDragEnabled(True)
+        self.pages.setAcceptDrops(True)
+        self.pages.setDropIndicatorShown(True)
+        self.pages.setDragDropMode(QAbstractItemView.InternalMove)
+        self.pages.setDefaultDropAction(Qt.MoveAction)
+        for index in range(viewer.doc.page_count):
+            item = QListWidgetItem(f"Page {index + 1}")
+            item.setData(Qt.UserRole, index)
+            self.pages.addItem(item)
+        self.pages.setCurrentRow(viewer.current_page)
+        root.addWidget(self.pages, 1)
+        controls = QHBoxLayout()
+        self.rotate_button = QPushButton("Rotate selected +90°")
+        self.remove_button = QPushButton("Remove selected")
+        self.extract_button = QPushButton("Extract selected…")
+        controls.addWidget(self.rotate_button)
+        controls.addWidget(self.remove_button)
+        root.addLayout(controls)
+        root.addWidget(self.extract_button)
+        self.rotate_button.clicked.connect(self.rotate_selected)
+        self.remove_button.clicked.connect(self.remove_selected)
+        self.extract_button.clicked.connect(self.extract_selected)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel | QDialogButtonBox.Apply)
+        self.buttons.button(QDialogButtonBox.Apply).setText("Apply changes")
+        self.buttons.rejected.connect(self.reject)
+        self.buttons.button(QDialogButtonBox.Apply).clicked.connect(self.apply_changes)
+        root.addWidget(self.buttons)
+
+    def rotate_selected(self):
+        for item in self.pages.selectedItems():
+            page_index = item.data(Qt.UserRole)
+            self.rotations[page_index] = (self.rotations.get(page_index, 0) + 90) % 360
+            delta = self.rotations[page_index]
+            item.setText(f"Page {page_index + 1}" + (f" · rotate +{delta}°" if delta else ""))
+
+    def remove_selected(self):
+        rows = sorted((self.pages.row(item) for item in self.pages.selectedItems()), reverse=True)
+        for row in rows:
+            self.pages.takeItem(row)
+
+    def extract_selected(self):
+        selected = {item.data(Qt.UserRole) for item in self.pages.selectedItems()}
+        ordered = [self.pages.item(row).data(Qt.UserRole) for row in range(self.pages.count())
+                   if self.pages.item(row).data(Qt.UserRole) in selected]
+        if not ordered:
+            QMessageBox.information(self, "Extract pages", "Select at least one page first.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Extract pages to PDF", "extracted-pages.pdf", "PDF files (*.pdf)")
+        if not path:
+            return
+        path = ensure_pdf_extension(path)
+        if self.viewer.file_path and same_path(path, self.viewer.file_path):
+            QMessageBox.warning(self, "Extract pages", "Choose a different file name so the open PDF is not overwritten.")
+            return
+        output = None
+        try:
+            output = fitz.open()
+            for page_index in ordered:
+                output.insert_pdf(self.viewer.doc, from_page=page_index, to_page=page_index)
+            output.save(path)
+            QMessageBox.information(self, "Extract pages", f"Extracted {len(ordered)} page(s) to:\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Extract pages failed", str(exc))
+        finally:
+            if output is not None:
+                output.close()
+
+    def apply_changes(self):
+        order = [self.pages.item(row).data(Qt.UserRole) for row in range(self.pages.count())]
+        if not order:
+            QMessageBox.warning(self, "Manage PDF pages", "A PDF must contain at least one page.")
+            return
+        if len(order) != len(set(order)):
+            QMessageBox.warning(self, "Manage PDF pages", "The page list is invalid; no changes were applied.")
+            return
+        original_order = list(range(self.viewer.doc.page_count))
+        included = set(order)
+        has_rotation = any(delta and page_index in included for page_index, delta in self.rotations.items())
+        if order == original_order and not has_rotation:
+            self.accept()
+            return
+        self.viewer._record_undo()
+        old_current = self.viewer.current_page
+        try:
+            for page_index, delta in self.rotations.items():
+                if delta and page_index in included:
+                    page = self.viewer.doc.load_page(page_index)
+                    page.set_rotation((page.rotation + delta) % 360)
+            self.viewer.doc.select(order)
+            self.viewer.current_page = order.index(old_current) if old_current in order else min(old_current, len(order) - 1)
+            self.viewer._after_document_structure_change()
+            self.accept()
+        except Exception as exc:
+            QMessageBox.critical(self, "Could not update pages", str(exc))
+            self.viewer.undo_edit()
+
+
 class ParinPDFViewer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -447,6 +605,10 @@ class ParinPDFViewer(QMainWindow):
             self._last_session_zoom = 1.0
         self._last_session_fit_mode = self.settings_store.value('last_fit_mode', 'width', type=str)
         self._thumbnail_cache = OrderedDict()
+        self._undo_stack = []
+        self._redo_stack = []
+        self._history_max_bytes = 16 * 1024 * 1024
+        self._undo_disabled_for_size = False
         self._last_search_query = ''
         self._last_search_page = -1
         self._last_search_rect_index = -1
@@ -519,8 +681,9 @@ class ParinPDFViewer(QMainWindow):
             ("Zoom out","Ctrl+-",self.zoom_out),("Fit width","Ctrl+W",self.fit_width),
             ("Fit page","Ctrl+Shift+W",self.fit_page),("Fullscreen","F11",self.toggle_fullscreen),
             ("Previous","Left",self.prev_page),("Next","Right",self.next_page),
-            ("Reset zoom","Ctrl+0",self.reset_zoom)]:
-            QAction(text,self,shortcut=key,triggered=slot)
+            ("Reset zoom","Ctrl+0",self.reset_zoom),("Undo","Ctrl+Z",self.undo_edit),("Redo","Ctrl+Y",self.redo_edit)]:
+            action=QAction(text,self,shortcut=key,triggered=slot)
+            self.addAction(action)
 
     def open_settings(self):
         dlg=SettingsDialog(self)
@@ -617,6 +780,23 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self.navigation_action.triggered.connect(self.toggle_navigation_panel)
         self.recent_menu = more.addMenu(self._nav_text("recent"))
         self.recent_menu.aboutToShow.connect(self._refresh_recent_menu)
+        self.page_management_menu = more.addMenu("Page management")
+        self.page_actions = {}
+        for key, text, slot in [
+            ("organize", "Manage pages…", self.open_page_organizer),
+            ("insert", "Insert pages from PDF…", self.insert_pages_from_pdf),
+        ]:
+            action = QAction(text, self)
+            action.triggered.connect(slot)
+            self.page_management_menu.addAction(action)
+            self.page_actions[key] = action
+        more.addSeparator()
+        self.undo_action = more.addAction("Undo", self.undo_edit)
+        self.undo_action.setShortcut("Ctrl+Z")
+        self.addAction(self.undo_action)
+        self.redo_action = more.addAction("Redo", self.redo_edit)
+        self.redo_action.setShortcut("Ctrl+Y")
+        self.addAction(self.redo_action)
         self.btn_more.setMenu(more); row2.addWidget(self.btn_more); row2.addStretch(); tl.addLayout(row2)
         self.main_layout.addWidget(self.tool_area)
 
@@ -812,6 +992,178 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         if hasattr(self, "statusBar"):
             self.statusBar().showMessage("Unsaved PDF changes", 4000)
 
+
+    def _snapshot_for_history(self):
+        if not self.doc or self._undo_disabled_for_size:
+            return None
+        try:
+            if self.file_path and os.path.isfile(self.file_path) and os.path.getsize(self.file_path) > self._history_max_bytes:
+                return None
+            snapshot = self.doc.tobytes(garbage=0, deflate=True)
+            return snapshot if len(snapshot) <= self._history_max_bytes else None
+        except Exception:
+            return None
+
+    def _record_undo(self):
+        if not self.doc or self._undo_disabled_for_size:
+            return False
+        snapshot = self._snapshot_for_history()
+        if snapshot is None:
+            self._undo_stack.clear()
+            self._redo_stack.clear()
+            self._undo_disabled_for_size = True
+            self.statusBar().showMessage("Undo/redo is disabled for this PDF because its history snapshot exceeds 16 MiB or could not be created.", 7000)
+            return False
+        self._undo_stack.append(snapshot)
+        del self._undo_stack[:-5]
+        self._redo_stack.clear()
+        return True
+
+    def _restore_history_snapshot(self, snapshot, label):
+        replacement = None
+        try:
+            replacement = fitz.open(stream=snapshot, filetype="pdf")
+            if replacement.is_encrypted and self._document_password:
+                if not replacement.authenticate(self._document_password):
+                    raise RuntimeError("The history snapshot could not be authenticated.")
+            previous = self.doc
+            self.doc = replacement
+            replacement = None
+            if previous:
+                previous.close()
+            self.current_page = max(0, min(self.current_page, self.doc.page_count - 1))
+            self.spin_page.blockSignals(True)
+            self.spin_page.setMaximum(self.doc.page_count)
+            self.spin_page.setValue(self.current_page + 1)
+            self.spin_page.blockSignals(False)
+            self._last_search_query = ""
+            self._last_search_page = -1
+            self._last_search_rect_index = -1
+            self.search_highlight = None
+            self._document_dirty = True
+            self._thumbnail_cache.clear()
+            self._refresh_navigation()
+            self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
+            self.statusBar().showMessage(f"{label} complete · unsaved changes", 5000)
+        except Exception as exc:
+            self.statusBar().showMessage(f"{label} failed: {exc}", 7000)
+        finally:
+            if replacement is not None:
+                replacement.close()
+
+    def undo_edit(self):
+        if not self.doc or not self._undo_stack:
+            self.statusBar().showMessage("There is no edit to undo.", 3000)
+            return
+        current = self._snapshot_for_history()
+        if current is None:
+            self._undo_stack.clear()
+            self._redo_stack.clear()
+            self._undo_disabled_for_size = True
+            self.statusBar().showMessage("Undo/redo history is unavailable for this PDF size.", 6000)
+            return
+        previous = self._undo_stack.pop()
+        self._redo_stack.append(current)
+        self._restore_history_snapshot(previous, "Undo")
+
+    def redo_edit(self):
+        if not self.doc or not self._redo_stack:
+            self.statusBar().showMessage("There is no edit to redo.", 3000)
+            return
+        current = self._snapshot_for_history()
+        if current is None:
+            self._undo_stack.clear()
+            self._redo_stack.clear()
+            self._undo_disabled_for_size = True
+            self.statusBar().showMessage("Undo/redo history is unavailable for this PDF size.", 6000)
+            return
+        next_state = self._redo_stack.pop()
+        self._undo_stack.append(current)
+        del self._undo_stack[:-5]
+        self._restore_history_snapshot(next_state, "Redo")
+
+    def open_page_organizer(self):
+        if not self.doc:
+            QMessageBox.information(self, "Manage PDF pages", "Open a PDF first.")
+            return
+        if self.file_path and os.path.isfile(self.file_path) and os.path.getsize(self.file_path) > 256 * 1024 * 1024:
+            QMessageBox.information(self, "Manage PDF pages", "The page organizer is disabled for PDFs larger than 256 MiB to avoid large in-memory edit histories.")
+            return
+        PageOrganizerDialog(self).exec()
+
+    def insert_pages_from_pdf(self):
+        if not self.doc:
+            QMessageBox.information(self, "Insert pages", "Open a destination PDF first.")
+            return
+        source_path, _ = QFileDialog.getOpenFileName(self, "Insert pages from PDF", "", "PDF documents (*.pdf)")
+        if not source_path:
+            return
+        source = None
+        try:
+            source = fitz.open(source_path)
+            if source.is_encrypted:
+                password, ok = QInputDialog.getText(self, "Unlock source PDF", "Enter the source PDF password:", QLineEdit.Password)
+                if not ok or not password:
+                    return
+                if not source.authenticate(password):
+                    QMessageBox.critical(self, "Insert pages", "The source PDF password is incorrect.")
+                    return
+            if source.page_count < 1:
+                QMessageBox.information(self, "Insert pages", "The selected PDF has no pages to insert.")
+                return
+            self._record_undo()
+            insert_at = self.current_page + 1
+            inserted_count = source.page_count
+            self.doc.insert_pdf(source, start_at=insert_at)
+            self.current_page = insert_at
+            self._after_document_structure_change()
+            self.statusBar().showMessage(f"Inserted {inserted_count} page(s) from {Path(source_path).name}", 6000)
+        except Exception as exc:
+            QMessageBox.critical(self, "Insert pages failed", str(exc))
+        finally:
+            if source is not None:
+                source.close()
+
+    def _after_document_structure_change(self):
+        if not self.doc or self.doc.page_count < 1:
+            return
+        self.current_page = max(0, min(self.current_page, self.doc.page_count - 1))
+        self.spin_page.blockSignals(True)
+        self.spin_page.setMaximum(self.doc.page_count)
+        self.spin_page.setValue(self.current_page + 1)
+        self.spin_page.blockSignals(False)
+        self._last_search_query = ""
+        self._last_search_page = -1
+        self._last_search_rect_index = -1
+        self.search_highlight = None
+        self._thumbnail_cache.clear()
+        self._refresh_navigation()
+        self.mark_document_modified()
+        self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
+
+    def _retranslate_page_management(self):
+        if not hasattr(self, "page_management_menu"):
+            return
+        labels = {
+            "en": ("Page management", "Manage pages…", "Insert pages from PDF…", "Undo", "Redo"),
+            "fa": ("مدیریت صفحات", "مدیریت صفحات…", "درج صفحه از PDF…", "واگرد", "ازنو"),
+            "de": ("Seitenverwaltung", "Seiten verwalten…", "Seiten aus PDF einfügen…", "Rückgängig", "Wiederholen"),
+            "es": ("Administrar páginas", "Administrar páginas…", "Insertar páginas desde PDF…", "Deshacer", "Rehacer"),
+            "fr": ("Gestion des pages", "Gérer les pages…", "Insérer des pages depuis un PDF…", "Annuler", "Rétablir"),
+            "da": ("Sidehåndtering", "Administrer sider…", "Indsæt sider fra PDF…", "Fortryd", "Gentag"),
+            "no": ("Sidebehandling", "Administrer sider…", "Sett inn sider fra PDF…", "Angre", "Gjør om"),
+            "fi": ("Sivujen hallinta", "Hallitse sivuja…", "Lisää sivuja PDF-tiedostosta…", "Kumoa", "Tee uudelleen"),
+            "sv": ("Sidhantering", "Hantera sidor…", "Infoga sidor från PDF…", "Ångra", "Gör om"),
+            "el": ("Διαχείριση σελίδων", "Διαχείριση σελίδων…", "Εισαγωγή σελίδων από PDF…", "Αναίρεση", "Επανάληψη"),
+            "ar": ("إدارة الصفحات", "إدارة الصفحات…", "إدراج صفحات من PDF…", "تراجع", "إعادة")
+        }
+        values = labels.get(self.current_lang, labels["en"])
+        self.page_management_menu.setTitle(values[0])
+        self.page_actions["organize"].setText(values[1])
+        self.page_actions["insert"].setText(values[2])
+        self.undo_action.setText(values[3])
+        self.redo_action.setText(values[4])
+
     def _confirm_unsaved_changes(self):
         if not self.doc or not self._document_dirty or not self.app_settings.get("confirm_close", True):
             return True
@@ -909,6 +1261,9 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
                 candidate.close()
                 return
             previous_doc = self.doc
+            self._undo_stack.clear()
+            self._redo_stack.clear()
+            self._undo_disabled_for_size = False
             self.doc = candidate
             candidate = None
             if previous_doc:
@@ -1102,6 +1457,20 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
             if k in self.group_labels: self.group_labels[k].setText(label)
         more_names=[TRANSLATIONS[self.current_lang]['search']+' PDF',TRANSLATIONS[self.current_lang]['pass_remove'],TRANSLATIONS[self.current_lang]['pass_add'],vals[7]]
         for a,text in zip(getattr(self,'more_actions',[]),more_names): a.setText(text)
+
+    def move_current_page(self, delta):
+        if not self.doc:
+            return
+        source_index = self.current_page
+        target_index = source_index + delta
+        if target_index < 0 or target_index >= self.doc.page_count:
+            return
+        self._record_undo()
+        order = list(range(self.doc.page_count))
+        order[source_index], order[target_index] = order[target_index], order[source_index]
+        self.doc.select(order)
+        self.current_page = target_index
+        self._after_document_structure_change()
 
     def _update_page_indicator(self):
         if hasattr(self,'lbl_page'):
@@ -1342,6 +1711,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         QApplication.setLayoutDirection(t['dir'])
         self._retranslate_shell()
         self._retranslate_navigation()
+        self._retranslate_page_management()
         self._update_page_indicator()
 
 
