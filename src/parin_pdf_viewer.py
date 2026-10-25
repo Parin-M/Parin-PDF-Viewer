@@ -681,7 +681,7 @@ class ParinPDFViewer(QMainWindow):
             ("Zoom out","Ctrl+-",self.zoom_out),("Fit width","Ctrl+W",self.fit_width),
             ("Fit page","Ctrl+Shift+W",self.fit_page),("Fullscreen","F11",self.toggle_fullscreen),
             ("Previous","Left",self.prev_page),("Next","Right",self.next_page),
-            ("Reset zoom","Ctrl+0",self.reset_zoom),("Undo","Ctrl+Z",self.undo_edit),("Redo","Ctrl+Y",self.redo_edit)]:
+            ("Reset zoom","Ctrl+0",self.reset_zoom)]:
             action=QAction(text,self,shortcut=key,triggered=slot)
             self.addAction(action)
 
