@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 import sys
 import re
+import os
+import tempfile
+from collections import OrderedDict
+from pathlib import Path
 import pymupdf as fitz  # PyMuPDF (modern API; avoids deprecated fitz import)
-from PySide6.QtCore import Qt, QUrl, QPointF, QTimer, QSettings, Signal, QSize, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QUrl, QPoint, QPointF, QRectF, QTimer, QSettings, Signal, QSize, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QLineEdit, QScrollArea, 
     QInputDialog, QMessageBox, QMenu, QColorDialog, QSpinBox, QDialog, QCheckBox,
     QComboBox, QSlider, QTabWidget, QFormLayout, QGroupBox, QDialogButtonBox,
-    QRadioButton, QButtonGroup, QListWidget, QStackedWidget, QFrame, QToolButton, QSizePolicy, QStyle, QGraphicsOpacityEffect
+    QRadioButton, QButtonGroup, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QDockWidget, QStackedWidget, QFrame, QToolButton, QSizePolicy, QStyle, QGraphicsOpacityEffect
 )
-from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient
+from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
+from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_files, ensure_pdf_extension, same_path, clamp_zoom
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -22,23 +27,25 @@ def clean_label(value):
     return re.sub(r'\s{2,}', ' ', EMOJI_RE.sub('', value)).strip()
 
 TRANSLATIONS = {
-    'fa': {'title': 'پرین | Parin v8.7', 'open': '📂 باز کردن', 'save': '💾 ذخیره', 'pen': '✏️ قلم', 'highlight': '🖍️ هایلایت', 'eraser': '🧹 پاک\u200cکن', 'add_text': '✍️ متن', 'color': '🎨 رنگ', 'theme': '🎨 تم', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ عرض', 'fit_page': '⤢ صفحه', 'prev': 'صفحه قبل ⬅️', 'next': '➡️ صفحه بعد', 'print_opt': '🖨️ چاپ', 'pass_remove': '🔓 حذف رمز', 'pass_add': '🔒 گذاشتن رمز', 'lofi': '🎵 موسیقی آرامش\u200cبخش', 'lang': '🌐 زبان', 'search': 'Search جستجو', 'rotate_left': '↶ چرخش', 'rotate_right': '↷ چرخش', 'fullscreen': '⛶ تمام\u200cصفحه', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'صفحه:', 'of': 'از', 'enter_pass': 'لطفاً رمز عبور فایل را وارد کنید:', 'set_pass': 'رمز عبور جدید برای فایل تعیین کنید:', 'enter_text': 'متن مورد نظر را وارد کنید:', 'find_text': 'عبارت جستجو در PDF:', 'not_found': 'عبارت موردنظر پیدا نشد.', 'saved': 'فایل با موفقیت ذخیره شد.', 'opened': 'File opened.', 'wrong_pass': 'رمز عبور اشتباه است!', 'choose_file': 'Choose file', 'unlock_name': 'ذخیره بدون رمز', 'protected_name': 'ذخیره فایل رمزگذاری\u200cشده', 'unlocked': 'رمز فایل برداشته شد.', 'protected': 'رمز عبور با موفقیت اعمال شد.', 'color_pick': 'انتخاب رنگ', 'music_stop': '⏸️ توقف موسیقی', 'dir': Qt.RightToLeft},
-    'en': {'title': 'Parin v8.7', 'open': '📂 Open', 'save': '💾 Save', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Theme', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Fit Width', 'fit_page': '⤢ Fit Page', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Language', 'search': 'Search Search', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Fullscreen', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Page:', 'of': 'of', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'da': {'title': 'Parin v8.7', 'open': '📂 Åbn', 'save': '💾 Gem', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Tema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Tilpas bredde', 'fit_page': '⤢ Tilpas side', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Sprog', 'search': 'Search Søg', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Fuldskærm', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Side:', 'of': 'af', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'de': {'title': 'Parin v8.7', 'open': '📂 Öffnen', 'save': '💾 Speichern', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Thema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Seitenbreite', 'fit_page': '⤢ Seite anpassen', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Sprache', 'search': 'Search Suchen', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Vollbild', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Seite:', 'of': 'von', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'es': {'title': 'Parin v8.7', 'open': '📂 Abrir', 'save': '💾 Guardar', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Tema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Ajustar ancho', 'fit_page': '⤢ Ajustar página', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Idioma', 'search': 'Search Buscar', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Pantalla completa', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Página:', 'of': 'de', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'no': {'title': 'Parin v8.7', 'open': '📂 Åpne', 'save': '💾 Lagre', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Tema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Tilpass bredde', 'fit_page': '⤢ Tilpass side', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Språk', 'search': 'Search Søk', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Fullskjerm', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Side:', 'of': 'av', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'fi': {'title': 'Parin v8.7', 'open': '📂 Avaa', 'save': '💾 Tallenna', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Teema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Sovita leveyteen', 'fit_page': '⤢ Sovita sivulle', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Kieli', 'search': 'Search Hae', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Koko näyttö', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Sivu:', 'of': '/', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'sv': {'title': 'Parin v8.7', 'open': '📂 Öppna', 'save': '💾 Spara', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Tema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Anpassa bredd', 'fit_page': '⤢ Anpassa sida', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Språk', 'search': 'Search Sök', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Helskärm', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Sida:', 'of': 'av', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'fr': {'title': 'Parin v8.7', 'open': '📂 Ouvrir', 'save': '💾 Enregistrer', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Thème', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Ajuster largeur', 'fit_page': '⤢ Ajuster page', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Langue', 'search': 'Search Rechercher', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Plein écran', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Page :', 'of': 'sur', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'el': {'title': 'Parin v8.7', 'open': '📂 Άνοιγμα', 'save': '💾 Αποθήκευση', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Θέμα', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Προσαρμογή πλάτους', 'fit_page': '⤢ Προσαρμογή σελίδας', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Γλώσσα', 'search': 'Search Αναζήτηση', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Πλήρης οθόνη', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Σελίδα:', 'of': 'από', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
-    'ar': {'title': 'Parin v8.7', 'open': '📂 فتح', 'save': '💾 حفظ', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 السمة', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ ملاءمة العرض', 'fit_page': '⤢ ملاءمة الصفحة', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 اللغة', 'search': 'Search بحث', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ ملء الشاشة', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'صفحة:', 'of': 'من', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.RightToLeft},
+    'fa': {'title': 'پرین | Parin v8.9', 'open': '📂 باز کردن', 'save': '💾 ذخیره', 'pen': '✏️ قلم', 'highlight': '🖍️ هایلایت', 'eraser': '🧹 پاک\u200cکن', 'add_text': '✍️ متن', 'color': '🎨 رنگ', 'theme': '🎨 تم', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ عرض', 'fit_page': '⤢ صفحه', 'prev': 'صفحه قبل ⬅️', 'next': '➡️ صفحه بعد', 'print_opt': '🖨️ چاپ', 'pass_remove': '🔓 حذف رمز', 'pass_add': '🔒 گذاشتن رمز', 'lofi': '🎵 موسیقی آرامش\u200cبخش', 'lang': '🌐 زبان', 'search': 'Search جستجو', 'rotate_left': '↶ چرخش', 'rotate_right': '↷ چرخش', 'fullscreen': '⛶ تمام\u200cصفحه', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'صفحه:', 'of': 'از', 'enter_pass': 'لطفاً رمز عبور فایل را وارد کنید:', 'set_pass': 'رمز عبور جدید برای فایل تعیین کنید:', 'enter_text': 'متن مورد نظر را وارد کنید:', 'find_text': 'عبارت جستجو در PDF:', 'not_found': 'عبارت موردنظر پیدا نشد.', 'saved': 'فایل با موفقیت ذخیره شد.', 'opened': 'File opened.', 'wrong_pass': 'رمز عبور اشتباه است!', 'choose_file': 'Choose file', 'unlock_name': 'ذخیره بدون رمز', 'protected_name': 'ذخیره فایل رمزگذاری\u200cشده', 'unlocked': 'رمز فایل برداشته شد.', 'protected': 'رمز عبور با موفقیت اعمال شد.', 'color_pick': 'انتخاب رنگ', 'music_stop': '⏸️ توقف موسیقی', 'dir': Qt.RightToLeft},
+    'en': {'title': 'Parin v8.9', 'open': '📂 Open', 'save': '💾 Save', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Theme', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Fit Width', 'fit_page': '⤢ Fit Page', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Language', 'search': 'Search Search', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Fullscreen', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Page:', 'of': 'of', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'da': {'title': 'Parin v8.9', 'open': '📂 Åbn', 'save': '💾 Gem', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Tema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Tilpas bredde', 'fit_page': '⤢ Tilpas side', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Sprog', 'search': 'Search Søg', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Fuldskærm', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Side:', 'of': 'af', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'de': {'title': 'Parin v8.9', 'open': '📂 Öffnen', 'save': '💾 Speichern', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Thema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Seitenbreite', 'fit_page': '⤢ Seite anpassen', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Sprache', 'search': 'Search Suchen', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Vollbild', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Seite:', 'of': 'von', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'es': {'title': 'Parin v8.9', 'open': '📂 Abrir', 'save': '💾 Guardar', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Tema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Ajustar ancho', 'fit_page': '⤢ Ajustar página', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Idioma', 'search': 'Search Buscar', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Pantalla completa', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Página:', 'of': 'de', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'no': {'title': 'Parin v8.9', 'open': '📂 Åpne', 'save': '💾 Lagre', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Tema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Tilpass bredde', 'fit_page': '⤢ Tilpass side', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Språk', 'search': 'Search Søk', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Fullskjerm', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Side:', 'of': 'av', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'fi': {'title': 'Parin v8.9', 'open': '📂 Avaa', 'save': '💾 Tallenna', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Teema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Sovita leveyteen', 'fit_page': '⤢ Sovita sivulle', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Kieli', 'search': 'Search Hae', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Koko näyttö', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Sivu:', 'of': '/', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'sv': {'title': 'Parin v8.9', 'open': '📂 Öppna', 'save': '💾 Spara', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Tema', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Anpassa bredd', 'fit_page': '⤢ Anpassa sida', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Språk', 'search': 'Search Sök', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Helskärm', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Sida:', 'of': 'av', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'fr': {'title': 'Parin v8.9', 'open': '📂 Ouvrir', 'save': '💾 Enregistrer', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Thème', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Ajuster largeur', 'fit_page': '⤢ Ajuster page', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Langue', 'search': 'Search Rechercher', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Plein écran', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Page :', 'of': 'sur', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'el': {'title': 'Parin v8.9', 'open': '📂 Άνοιγμα', 'save': '💾 Αποθήκευση', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 Θέμα', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ Προσαρμογή πλάτους', 'fit_page': '⤢ Προσαρμογή σελίδας', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 Γλώσσα', 'search': 'Search Αναζήτηση', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ Πλήρης οθόνη', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'Σελίδα:', 'of': 'από', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.LeftToRight},
+    'ar': {'title': 'Parin v8.9', 'open': '📂 فتح', 'save': '💾 حفظ', 'pen': '✏️ Pen', 'highlight': '🖍️ Highlight', 'eraser': '🧹 Eraser', 'add_text': '✍️ Text', 'color': '🎨 Color', 'theme': '🎨 السمة', 'zoom_in': '🔍+', 'zoom_out': '🔍-', 'fit_width': '↔️ ملاءمة العرض', 'fit_page': '⤢ ملاءمة الصفحة', 'prev': '⬅️ Prev', 'next': 'Next ➡️', 'print_opt': '🖨️ Print', 'pass_remove': '🔓 Remove Password', 'pass_add': '🔒 Set Password', 'lofi': '🎵 Lo-Fi Music', 'lang': '🌐 اللغة', 'search': 'Search بحث', 'rotate_left': '↶ Rotate', 'rotate_right': '↷ Rotate', 'fullscreen': '⛶ ملء الشاشة', 'reset_zoom': '100%', 'fit': '📐 Fit', 'page': 'صفحة:', 'of': 'من', 'enter_pass': 'Enter file password:', 'set_pass': 'Enter new password:', 'enter_text': 'Enter text to add:', 'find_text': 'Search text in PDF:', 'not_found': 'Text not found.', 'saved': 'File saved successfully.', 'opened': 'File opened.', 'wrong_pass': 'Incorrect password!', 'choose_file': 'Choose file', 'unlock_name': 'Save without password', 'protected_name': 'Save encrypted PDF', 'unlocked': 'Password removed.', 'protected': 'Password applied successfully.', 'color_pick': 'Choose color', 'music_stop': '⏸️ Stop music', 'dir': Qt.RightToLeft},
 }
 
 # Final UI text normalization: feature labels use icons, not emoji.
 for _lang, _items in TRANSLATIONS.items():
     for _key, _value in list(_items.items()):
         if isinstance(_value, str): _items[_key] = clean_label(_value)
+    if isinstance(_items.get('title'), str):
+        _items['title'] = re.sub(r'v\d+\.\d+(?:\.\d+)?', f"v{'.'.join(APP_VERSION.split('.')[:2])}", _items['title'])
 
 LOFI_STREAM_URL = "https://stream.zeno.fm/f3wvbbqmdg8uv"
 
@@ -106,6 +113,26 @@ class PDFPageLabel(QLabel):
         self.current_stroke = []
         self.setMouseTracking(True)
 
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        hit = getattr(self.viewer, "search_highlight", None)
+        if not hit or not self.viewer.doc or hit.get("page") != self.viewer.current_page:
+            return
+        try:
+            page = self.viewer.doc.load_page(self.viewer.current_page)
+            matrix = fitz.Matrix(self.viewer.zoom_factor, self.viewer.zoom_factor).prerotate(self.viewer.rotation)
+            bounds = page.rect * matrix
+            rect = fitz.Rect(hit["rect"]) * matrix
+            rect = fitz.Rect(rect.x0 - bounds.x0, rect.y0 - bounds.y0, rect.x1 - bounds.x0, rect.y1 - bounds.y0)
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setPen(QPen(QColor("#FFB300"), 2))
+            painter.setBrush(QColor(255, 193, 7, 52))
+            painter.drawRoundedRect(QRectF(rect.x0, rect.y0, rect.width, rect.height), 3.0, 3.0)
+            painter.end()
+        except Exception:
+            return
+
     def mousePressEvent(self, event: QMouseEvent):
         if not self.viewer.doc or not self.viewer.active_tool or event.button() != Qt.LeftButton: 
             return
@@ -127,6 +154,7 @@ class PDFPageLabel(QLabel):
                 r, g, b = self.viewer.selected_color.redF(), self.viewer.selected_color.greenF(), self.viewer.selected_color.blueF()
                 annot = page.add_freetext_annot(fitz.Rect(pdf_pt.x, pdf_pt.y, pdf_pt.x + 200, pdf_pt.y + 30), text, fontsize=12, text_color=(r, g, b))
                 annot.update()
+                self.viewer.mark_document_modified()
                 self.viewer.render_page()
 
     def mouseMoveEvent(self, event: QMouseEvent):
@@ -157,6 +185,7 @@ class PDFPageLabel(QLabel):
                 annot.set_opacity(0.35)
 
             annot.update()
+            self.viewer.mark_document_modified()
             self.viewer.render_page()
 
         self.viewer.is_drawing = False
@@ -376,6 +405,22 @@ QFormLayout QLabel{{color:#253246;}}
         self.settings.update(self.collect()); self.viewer.app_settings.update(self.settings); self.viewer.apply_app_settings(); self.settings_changed.emit(self.settings)
     def accept(self): self.apply_changes(); super().accept()
 
+
+NAVIGATION_I18N = {
+    "en": {"dock":"Navigation","outline":"Outline","pages":"Pages","page":"Page {n}","nav_action":"Navigation Panel","recent":"Open Recent","no_recent":"No recent files","clear_recent":"Clear Recent Files","no_outline":"No outline in this PDF"},
+    "fa": {"dock":"ناوبری","outline":"فهرست","pages":"صفحات","page":"صفحهٔ {n}","nav_action":"پنل ناوبری","recent":"فایل‌های اخیر","no_recent":"فایل اخیری وجود ندارد","clear_recent":"پاک‌کردن فهرست فایل‌های اخیر","no_outline":"این PDF فهرست داخلی ندارد"},
+    "de": {"dock":"Navigation","outline":"Gliederung","pages":"Seiten","page":"Seite {n}","nav_action":"Navigationsbereich","recent":"Zuletzt geöffnet","no_recent":"Keine zuletzt verwendeten Dateien","clear_recent":"Liste leeren","no_outline":"Keine Gliederung in dieser PDF"},
+    "es": {"dock":"Navegación","outline":"Esquema","pages":"Páginas","page":"Página {n}","nav_action":"Panel de navegación","recent":"Archivos recientes","no_recent":"No hay archivos recientes","clear_recent":"Borrar recientes","no_outline":"Este PDF no tiene índice"},
+    "fr": {"dock":"Navigation","outline":"Sommaire","pages":"Pages","page":"Page {n}","nav_action":"Panneau de navigation","recent":"Fichiers récents","no_recent":"Aucun fichier récent","clear_recent":"Effacer les récents","no_outline":"Aucun sommaire dans ce PDF"},
+    "da": {"dock":"Navigation","outline":"Oversigt","pages":"Sider","page":"Side {n}","nav_action":"Navigationspanel","recent":"Seneste filer","no_recent":"Ingen seneste filer","clear_recent":"Ryd seneste","no_outline":"Ingen oversigt i PDF-filen"},
+    "no": {"dock":"Navigasjon","outline":"Disposisjon","pages":"Sider","page":"Side {n}","nav_action":"Navigasjonspanel","recent":"Nylige filer","no_recent":"Ingen nylige filer","clear_recent":"Tøm nylige","no_outline":"Ingen disposisjon i PDF-filen"},
+    "fi": {"dock":"Siirtyminen","outline":"Jäsennys","pages":"Sivut","page":"Sivu {n}","nav_action":"Siirtymispaneeli","recent":"Viimeisimmät tiedostot","no_recent":"Ei viimeisimpiä tiedostoja","clear_recent":"Tyhjennä viimeisimmät","no_outline":"PDF ei sisällä jäsennystä"},
+    "sv": {"dock":"Navigering","outline":"Disposition","pages":"Sidor","page":"Sida {n}","nav_action":"Navigeringspanel","recent":"Senaste filer","no_recent":"Inga senaste filer","clear_recent":"Rensa senaste","no_outline":"Ingen disposition i PDF-filen"},
+    "el": {"dock":"Πλοήγηση","outline":"Διάρθρωση","pages":"Σελίδες","page":"Σελίδα {n}","nav_action":"Πίνακας πλοήγησης","recent":"Πρόσφατα αρχεία","no_recent":"Δεν υπάρχουν πρόσφατα αρχεία","clear_recent":"Εκκαθάριση πρόσφατων","no_outline":"Το PDF δεν έχει διάρθρωση"},
+    "ar": {"dock":"التنقل","outline":"المخطط","pages":"الصفحات","page":"الصفحة {n}","nav_action":"لوحة التنقل","recent":"الملفات الأخيرة","no_recent":"لا توجد ملفات حديثة","clear_recent":"مسح الملفات الأخيرة","no_outline":"لا يوجد مخطط في هذا الـ PDF"},
+}
+
+
 class ParinPDFViewer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -393,6 +438,21 @@ class ParinPDFViewer(QMainWindow):
         self.large_file_mode = False
 
         self.settings_store = QSettings('Parin', 'ParinPDFViewer')
+        self.recent_files = normalize_recent_files(self.settings_store.value('recent_files', []))
+        self._last_session_file = self.settings_store.value('last_file', '', type=str)
+        self._last_session_page = self.settings_store.value('last_page', 1, type=int)
+        try:
+            self._last_session_zoom = float(self.settings_store.value('last_zoom', 1.0))
+        except (TypeError, ValueError):
+            self._last_session_zoom = 1.0
+        self._last_session_fit_mode = self.settings_store.value('last_fit_mode', 'width', type=str)
+        self._thumbnail_cache = OrderedDict()
+        self._last_search_query = ''
+        self._last_search_page = -1
+        self._last_search_rect_index = -1
+        self.search_highlight = None
+        self._document_password = ''
+        self._document_dirty = False
         self.app_settings = {
             'remember_last': self.settings_store.value('remember_last', True, type=bool),
             'restore_zoom': self.settings_store.value('restore_zoom', True, type=bool),
@@ -449,6 +509,8 @@ class ParinPDFViewer(QMainWindow):
         self.apply_language(self.current_lang)
         self.apply_app_settings()
         self._install_shortcuts()
+        if self.app_settings.get('remember_last', True) and self._last_session_file and os.path.isfile(self._last_session_file):
+            QTimer.singleShot(0, lambda path=self._last_session_file: self.open_file(path, restore_session=True))
 
     def _install_shortcuts(self):
         for text,key,slot in [
@@ -550,12 +612,235 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self.more_actions=[]
         for text,slot,ikey in [("Search PDF",self.search_pdf,"Search"),("Remove Password",self.remove_password,"Remove"),("Set Password",self.add_password,"Set"),("Settings",self.open_settings,"Settings")]:
             a=QAction(text,self); a.setIcon(make_action_icon(ICON_GLYPHS.get(ikey,"•"),22,THEME_ACCENTS.get(self.app_settings.get("theme","Arctic Glass"),(58,141,255)))); a.triggered.connect(slot); more.addAction(a); self.more_actions.append(a)
+        more.addSeparator()
+        self.navigation_action = more.addAction(self._nav_text("nav_action"))
+        self.navigation_action.triggered.connect(self.toggle_navigation_panel)
+        self.recent_menu = more.addMenu(self._nav_text("recent"))
+        self.recent_menu.aboutToShow.connect(self._refresh_recent_menu)
         self.btn_more.setMenu(more); row2.addWidget(self.btn_more); row2.addStretch(); tl.addLayout(row2)
         self.main_layout.addWidget(self.tool_area)
 
         self.scroll_area=QScrollArea(self); self.scroll_area.setWidgetResizable(True); self.scroll_area.setAlignment(Qt.AlignCenter); self.page_label=PDFPageLabel(self); self.scroll_area.setWidget(self.page_label); self.main_layout.addWidget(self.scroll_area,1); self.blue_overlay=QFrame(self.scroll_area.viewport()); self.blue_overlay.setAttribute(Qt.WA_TransparentForMouseEvents,True); self.blue_overlay.setGeometry(self.scroll_area.viewport().rect()); self.blue_overlay.hide(); self.blue_overlay.raise_()
         self.statusBar().showMessage("Ready • Open a PDF to begin")
         self.setWindowIcon(make_app_icon(64))
+        self._build_navigation_dock()
+
+    def _build_navigation_dock(self):
+        self._navigation_needs_refresh = True
+        self.navigation_dock = QDockWidget(self._nav_text("dock"), self)
+        self.navigation_dock.setObjectName("navigation_dock")
+        self.navigation_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.navigation_tabs = QTabWidget(self.navigation_dock)
+        self.outline_tree = QTreeWidget(self.navigation_tabs)
+        self.outline_tree.setHeaderHidden(True)
+        self.outline_tree.itemActivated.connect(self._navigate_outline_item)
+        self.page_list = QListWidget(self.navigation_tabs)
+        self.page_list.setIconSize(QSize(72, 96))
+        self.page_list.setUniformItemSizes(True)
+        self.page_list.currentRowChanged.connect(self._navigate_page_list)
+        self.page_list.verticalScrollBar().valueChanged.connect(self._schedule_thumbnail_refresh)
+        self.navigation_tabs.addTab(self.outline_tree, self._nav_text("outline"))
+        self.navigation_tabs.addTab(self.page_list, self._nav_text("pages"))
+        self.navigation_dock.setWidget(self.navigation_tabs)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.navigation_dock)
+        self.navigation_dock.hide()
+        self._thumbnail_refresh_timer = QTimer(self)
+        self._thumbnail_refresh_timer.setSingleShot(True)
+        self._thumbnail_refresh_timer.setInterval(80)
+        self._thumbnail_refresh_timer.timeout.connect(self._load_visible_thumbnails)
+
+    def _nav_text(self, key, **kwargs):
+        language = NAVIGATION_I18N.get(self.current_lang, NAVIGATION_I18N["en"])
+        template = language.get(key, NAVIGATION_I18N["en"].get(key, key))
+        try:
+            return template.format(**kwargs)
+        except (KeyError, ValueError):
+            return template
+
+    def _retranslate_navigation(self):
+        if not hasattr(self, "navigation_dock"):
+            return
+        self.navigation_dock.setWindowTitle(self._nav_text("dock"))
+        self.navigation_action.setText(self._nav_text("nav_action"))
+        self.recent_menu.setTitle(self._nav_text("recent"))
+        self.navigation_tabs.setTabText(0, self._nav_text("outline"))
+        self.navigation_tabs.setTabText(1, self._nav_text("pages"))
+        if self.navigation_dock.isVisible():
+            self._refresh_navigation()
+
+    def toggle_navigation_panel(self):
+        self.navigation_dock.setVisible(not self.navigation_dock.isVisible())
+        if self.navigation_dock.isVisible():
+            self._refresh_navigation()
+
+    def _navigate_outline_item(self, item, column=0):
+        page_index = item.data(0, Qt.UserRole)
+        if isinstance(page_index, int) and self.doc and 0 <= page_index < self.doc.page_count:
+            self.go_to_page(page_index + 1)
+
+    def _navigate_page_list(self, row):
+        if self.doc and 0 <= row < self.doc.page_count and row != self.current_page:
+            self.go_to_page(row + 1)
+
+    def _refresh_navigation(self):
+        if not hasattr(self, "page_list"):
+            return
+        if hasattr(self, "navigation_dock") and not self.navigation_dock.isVisible():
+            self._navigation_needs_refresh = True
+            return
+        self._navigation_needs_refresh = False
+        self._thumbnail_cache.clear()
+        self.page_list.blockSignals(True)
+        self.page_list.clear()
+        if self.doc:
+            for index in range(self.doc.page_count):
+                item = QListWidgetItem(self._nav_text("page", n=index + 1))
+                item.setData(Qt.UserRole, index)
+                self.page_list.addItem(item)
+            self.page_list.setCurrentRow(self.current_page if self.current_page < self.page_list.count() else 0)
+        self.page_list.blockSignals(False)
+
+        self.outline_tree.clear()
+        if self.doc:
+            try:
+                stack = []
+                for entry in self.doc.get_toc(simple=True):
+                    if len(entry) < 3:
+                        continue
+                    level, title, page_number = entry[:3]
+                    if not isinstance(page_number, int) or page_number < 1:
+                        continue
+                    item = QTreeWidgetItem([str(title or f"Page {page_number}")])
+                    item.setData(0, Qt.UserRole, page_number - 1)
+                    while stack and stack[-1][0] >= level:
+                        stack.pop()
+                    if stack:
+                        stack[-1][1].addChild(item)
+                    else:
+                        self.outline_tree.addTopLevelItem(item)
+                    stack.append((level, item))
+                if self.outline_tree.topLevelItemCount() == 0:
+                    empty = QTreeWidgetItem([self._nav_text("no_outline")])
+                    empty.setDisabled(True)
+                    self.outline_tree.addTopLevelItem(empty)
+                self.outline_tree.expandToDepth(1)
+            except Exception as exc:
+                self.statusBar().showMessage(f"Could not read PDF outline: {exc}", 5000)
+        self._schedule_thumbnail_refresh()
+
+    def _schedule_thumbnail_refresh(self, *_args):
+        timer = getattr(self, "_thumbnail_refresh_timer", None)
+        if timer is not None:
+            timer.start()
+
+    def _load_visible_thumbnails(self):
+        if not self.doc or not hasattr(self, "page_list") or self.page_list.count() == 0:
+            return
+        if hasattr(self, "navigation_dock") and not self.navigation_dock.isVisible():
+            return
+        first = self.page_list.indexAt(QPoint(5, 5)).row()
+        if first < 0:
+            first = max(0, self.page_list.currentRow())
+        visible_count = max(8, min(16, self.page_list.viewport().height() // 90 + 4))
+        for index in range(first, min(self.page_list.count(), first + visible_count)):
+            item = self.page_list.item(index)
+            if index in self._thumbnail_cache:
+                item.setIcon(self._thumbnail_cache[index])
+                self._thumbnail_cache.move_to_end(index)
+                continue
+            try:
+                page = self.doc.load_page(index)
+                width, height = max(1, page.rect.width), max(1, page.rect.height)
+                scale = min(88 / width, 112 / height, 0.28)
+                pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+                image = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
+                icon = QIcon(QPixmap.fromImage(image))
+                item.setIcon(icon)
+                self._thumbnail_cache[index] = icon
+                while len(self._thumbnail_cache) > 40:
+                    expired_index, _ = self._thumbnail_cache.popitem(last=False)
+                    expired_item = self.page_list.item(expired_index)
+                    if expired_item is not None:
+                        expired_item.setIcon(QIcon())
+            except Exception:
+                continue
+
+    def _persist_reading_position(self):
+        if not self.app_settings.get('remember_last', True):
+            self.settings_store.setValue('last_file', '')
+            return
+        if not self.doc or not self.file_path:
+            return
+        self._last_session_file = self.file_path
+        self._last_session_page = self.current_page + 1
+        self._last_session_zoom = clamp_zoom(self.zoom_factor)
+        self._last_session_fit_mode = self.fit_mode if self.fit_mode in ('width', 'page') else 'custom'
+        self.settings_store.setValue('last_file', self._last_session_file)
+        self.settings_store.setValue('last_page', self._last_session_page)
+        self.settings_store.setValue('last_zoom', self._last_session_zoom)
+        self.settings_store.setValue('last_fit_mode', self._last_session_fit_mode)
+
+    def _refresh_recent_menu(self):
+        if not hasattr(self, "recent_menu"):
+            return
+        self.recent_menu.clear()
+        existing = [path for path in self.recent_files if os.path.isfile(path)]
+        if not existing:
+            empty = self.recent_menu.addAction(self._nav_text("no_recent"))
+            empty.setEnabled(False)
+        else:
+            for path in existing:
+                action = self.recent_menu.addAction(Path(path).name)
+                action.setToolTip(path)
+                action.triggered.connect(lambda checked=False, selected=path: self.open_file(selected))
+        self.recent_menu.addSeparator()
+        clear_action = self.recent_menu.addAction(self._nav_text("clear_recent"))
+        clear_action.triggered.connect(self.clear_recent_files)
+
+    def _add_recent_file(self, file_path):
+        self.recent_files = add_recent_file(self.recent_files, file_path)
+        self.settings_store.setValue("recent_files", self.recent_files)
+        self._refresh_recent_menu()
+
+    def clear_recent_files(self):
+        self.recent_files = []
+        self.settings_store.setValue("recent_files", [])
+        self._refresh_recent_menu()
+
+    def mark_document_modified(self):
+        self._document_dirty = True
+        if hasattr(self, "statusBar"):
+            self.statusBar().showMessage("Unsaved PDF changes", 4000)
+
+    def _confirm_unsaved_changes(self):
+        if not self.doc or not self._document_dirty or not self.app_settings.get("confirm_close", True):
+            return True
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("Unsaved changes")
+        box.setText("This PDF has unsaved changes. Save them before continuing?")
+        box.setStandardButtons(QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
+        box.setDefaultButton(QMessageBox.Save)
+        answer = box.exec()
+        if answer == QMessageBox.Save:
+            return bool(self.save_file())
+        return answer == QMessageBox.Discard
+
+    def closeEvent(self, event):
+        if not self._confirm_unsaved_changes():
+            event.ignore()
+            return
+        self._persist_reading_position()
+        try:
+            self.player.stop()
+        except Exception:
+            pass
+        if self.doc:
+            try:
+                self.doc.close()
+            except Exception:
+                pass
+        event.accept()
 
     def search_from_bar(self):
         if self.quick_search.text().strip(): self._search_query(self.quick_search.text().strip())
@@ -594,47 +879,83 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         text_color = "#FFFFFF" if self.selected_color.lightness() < 128 else "#000000"
         self.btn_color.setStyleSheet(f"background-color: {hex_color}; color: {text_color}; border-radius: 8px;")
 
-    def open_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "انتخاب فایل", "", "سندها (*.pdf)")
-        if file_path:
-            try:
-                if self.doc: 
-                    self.doc.close()
-                
-                import os
-                file_size=os.path.getsize(file_path)
-                self.large_file_mode = file_size >= 1024**3
-                doc = fitz.open(file_path)
-                if self.large_file_mode:
-                    self.app_settings['low_memory']=True
-                    self.app_settings['cache_pages']=False
-                    self.app_settings['preload_pages']=False
-                t = TRANSLATIONS[self.current_lang]
-
-                if doc.is_encrypted:
-                    pwd, ok = QInputDialog.getText(self, "رمز عبور", t["enter_pass"], QLineEdit.Password)
-                    if ok and pwd:
-                        if not doc.authenticate(pwd):
-                            QMessageBox.critical(self, "خطا", "رمز عبور اشتباه است!")
-                            return
-                    else: 
-                        return
-
-                self.doc = doc
-                self.file_path = file_path
-                self.current_page = 0
-                self.zoom_factor = 1.0
-                self.rotation = {'0°':0,'90°':90,'180°':180,'270°':270}.get(self.app_settings.get('rotation','0°'),0)
-                self.fit_mode = {'Fit Width':'width','Fit Page':'page','100%':None}.get(self.app_settings.get('fit_mode','Fit Width'),'width')
-                
-                self.spin_page.blockSignals(True)
-                self.spin_page.setMaximum(self.doc.page_count)
-                self.spin_page.setValue(1)
-                self.spin_page.blockSignals(False)
-                
-                self.fit_width()
-            except Exception as e:
-                QMessageBox.critical(self, "خطا", f"خطا در باز کردن فایل: {str(e)}")
+    def open_file(self, selected_path=None, restore_session=False):
+        file_path = selected_path
+        if not file_path:
+            file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF documents (*.pdf)")
+        if not file_path:
+            return
+        candidate = None
+        try:
+            file_path = os.path.abspath(os.path.expanduser(file_path))
+            if not os.path.isfile(file_path):
+                raise FileNotFoundError(f"File does not exist: {file_path}")
+            file_size = os.path.getsize(file_path)
+            candidate = fitz.open(file_path)
+            password = ""
+            if candidate.is_encrypted:
+                pwd, ok = QInputDialog.getText(self, "Unlock PDF", TRANSLATIONS[self.current_lang]["enter_pass"], QLineEdit.Password)
+                if not ok or not pwd:
+                    candidate.close()
+                    return
+                if not candidate.authenticate(pwd):
+                    candidate.close()
+                    QMessageBox.critical(self, "Cannot open PDF", TRANSLATIONS[self.current_lang]["wrong_pass"])
+                    return
+                password = pwd
+            if candidate.page_count < 1:
+                raise ValueError("The PDF contains no readable pages.")
+            if not self._confirm_unsaved_changes():
+                candidate.close()
+                return
+            previous_doc = self.doc
+            self.doc = candidate
+            candidate = None
+            if previous_doc:
+                try:
+                    previous_doc.close()
+                except Exception:
+                    pass
+            self.file_path = file_path
+            self._document_password = password
+            self._document_dirty = False
+            self.large_file_mode = file_size >= 1024 ** 3
+            if self.large_file_mode:
+                self.app_settings["low_memory"] = True
+                self.app_settings["cache_pages"] = False
+                self.app_settings["preload_pages"] = False
+            self.current_page = 0
+            self.zoom_factor = 1.0
+            self.rotation = {"0°": 0, "90°": 90, "180°": 180, "270°": 270}.get(self.app_settings.get("rotation", "0°"), 0)
+            self.fit_mode = {"Fit Width": "width", "Fit Page": "page", "100%": None}.get(self.app_settings.get("fit_mode", "Fit Width"), "width")
+            if restore_session and self.app_settings.get("remember_last", True) and same_path(file_path, self._last_session_file):
+                self.current_page = max(0, min(self.doc.page_count - 1, self._last_session_page - 1))
+                if self.app_settings.get("restore_zoom", True):
+                    if self._last_session_fit_mode in ("width", "page"):
+                        self.fit_mode = self._last_session_fit_mode
+                    else:
+                        self.fit_mode = None
+                        self.zoom_factor = clamp_zoom(self._last_session_zoom)
+            self.spin_page.blockSignals(True)
+            self.spin_page.setMaximum(self.doc.page_count)
+            self.spin_page.setValue(self.current_page + 1)
+            self.spin_page.blockSignals(False)
+            self._last_search_query = ""
+            self._last_search_page = -1
+            self._last_search_rect_index = -1
+            self.search_highlight = None
+            self._refresh_navigation()
+            self._apply_fit() if self.fit_mode in ('width', 'page') else self.render_page()
+            self._add_recent_file(file_path)
+            self._persist_reading_position()
+            self.statusBar().showMessage(f"Opened {Path(file_path).name} · {self.doc.page_count} pages", 5000)
+        except Exception as exc:
+            if candidate is not None:
+                try:
+                    candidate.close()
+                except Exception:
+                    pass
+            QMessageBox.critical(self, "Cannot open PDF", f"The file could not be opened.\\n\\n{exc}")
 
     def _effective_page_size(self, page):
         return (page.rect.height, page.rect.width) if self.rotation % 180 else (page.rect.width, page.rect.height)
@@ -642,14 +963,24 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
     def render_page(self):
         if not self.doc or not (0 <= self.current_page < self.doc.page_count):
             return
-        page=self.doc.load_page(self.current_page)
-        self.zoom_factor=max(0.1,min(self.zoom_factor,8.0))
-        mat=fitz.Matrix(self.zoom_factor,self.zoom_factor).prerotate(self.rotation)
-        pix=page.get_pixmap(matrix=mat,alpha=False)
-        img=QImage(pix.samples,pix.width,pix.height,pix.stride,QImage.Format_RGB888).copy()
-        self.page_label.setPixmap(QPixmap.fromImage(img))
-        self.page_label.adjustSize()
-        self._update_page_indicator()
+        try:
+            page = self.doc.load_page(self.current_page)
+            self.zoom_factor = clamp_zoom(self.zoom_factor)
+            mat = fitz.Matrix(self.zoom_factor, self.zoom_factor).prerotate(self.rotation)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
+            self.page_label.setPixmap(QPixmap.fromImage(img))
+            self.page_label.adjustSize()
+            if not self._navigation_needs_refresh and hasattr(self, "page_list") and 0 <= self.current_page < self.page_list.count() and self.page_list.currentRow() != self.current_page:
+                self.page_list.blockSignals(True)
+                self.page_list.setCurrentRow(self.current_page)
+                self.page_list.blockSignals(False)
+                self._schedule_thumbnail_refresh()
+            self._update_page_indicator()
+            self.page_label.update()
+            self._persist_reading_position()
+        except Exception as exc:
+            self.statusBar().showMessage(f"Could not render page {self.current_page + 1}: {exc}", 6000)
 
     def get_pdf_coords(self,pos: QPointF):
         pix=self.page_label.pixmap()
@@ -726,15 +1057,43 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         t=TRANSLATIONS[self.current_lang]; text,ok=QInputDialog.getText(self,t['search'],t['find_text'])
         if ok and text.strip(): self._search_query(text.strip())
 
-    def _search_query(self,q):
-        if not self.doc: return
-        n=self.doc.page_count
-        if n <= 0: return
-        order=list(range((self.current_page+1)%n,n))+list(range(0,(self.current_page+1)%n))
-        for i in order:
-            if self.doc.load_page(i).search_for(q):
-                self.current_page=i; self.spin_page.blockSignals(True); self.spin_page.setValue(i+1); self.spin_page.blockSignals(False); self._apply_fit() if self.fit_mode in ('width','page') else self.render_page(); self.statusBar().showMessage(f"Found “{q}” on page {i+1}"); return
-        QMessageBox.information(self,TRANSLATIONS[self.current_lang]['search'],TRANSLATIONS[self.current_lang]['not_found'])
+    def _search_query(self, q):
+        if not self.doc or not q.strip():
+            return
+        q = q.strip()
+        page_count = self.doc.page_count
+        if page_count <= 0:
+            return
+        same_query = q.casefold() == self._last_search_query.casefold() and self._last_search_page == self.current_page
+        start_page = self.current_page
+        start_rect = self._last_search_rect_index + 1 if same_query else 0
+        for offset in range(page_count):
+            page_index = (start_page + offset) % page_count
+            try:
+                page = self.doc.load_page(page_index)
+                matches = page.search_for(q)
+            except Exception as exc:
+                self.statusBar().showMessage(f"Search failed: {exc}", 5000)
+                return
+            match_index = start_rect if offset == 0 else 0
+            if match_index < len(matches):
+                self.current_page = page_index
+                self.spin_page.blockSignals(True)
+                self.spin_page.setValue(page_index + 1)
+                self.spin_page.blockSignals(False)
+                self._last_search_query = q
+                self._last_search_page = page_index
+                self._last_search_rect_index = match_index
+                self.search_highlight = {"page": page_index, "rect": matches[match_index]}
+                if self.fit_mode in ("width", "page"):
+                    self._apply_fit()
+                else:
+                    self.render_page()
+                self.statusBar().showMessage(f"Match {match_index + 1} of {len(matches)} on page {page_index + 1} · Enter to find next", 6000)
+                return
+        self.search_highlight = None
+        self.page_label.update()
+        QMessageBox.information(self, TRANSLATIONS[self.current_lang]["search"], TRANSLATIONS[self.current_lang]["not_found"])
 
     def _retranslate_shell(self):
         extra={'en':('Fast • Focused • PDF workspace','FILE','ANNOTATE','VIEW','PAGE','TOOLS','More More','Settings Settings','Ready • Open a PDF to begin','Search Search inside PDF…'),'fa':('سریع • متمرکز • محیط حرفه‌ای PDF','فایل','حاشیه‌نویسی','نمایش','صفحه','ابزارها','More بیشتر','Settings تنظیمات','آماده • یک PDF باز کنید','Search جستجو در PDF…'),'de':('Schnell • Fokus • PDF-Arbeitsbereich','DATEI','ANMERKEN','ANSICHT','SEITE','WERKZEUGE','More Mehr','Settings Einstellungen','Bereit • PDF öffnen','Search Im PDF suchen…'),'es':('Rápido • Enfocado • Espacio PDF','ARCHIVO','ANOTAR','VISTA','PÁGINA','HERRAMIENTAS','More Más','Settings Ajustes','Listo • Abra un PDF','Search Buscar en PDF…'),'fr':('Rapide • Concentré • Espace PDF','FICHIER','ANNOTER','AFFICHAGE','PAGE','OUTILS','More Plus','Settings Paramètres','Prêt • Ouvrez un PDF','Search Rechercher dans le PDF…'),'da':('Hurtig • Fokuseret • PDF-arbejdsområde','FIL','ANNOTERING','VISNING','SIDE','VÆRKTØJER','More Mere','Settings Indstillinger','Klar • Åbn en PDF','Search Søg i PDF…'),'no':('Rask • Fokusert • PDF-område','FIL','MERKNADER','VISNING','SIDE','VERKTØY','More Mer','Settings Innstillinger','Klar • Åpne en PDF','Search Søk i PDF…'),'fi':('Nopea • Keskittynyt • PDF-työtila','TIEDOSTO','MERKINNÄT','NÄKYMÄ','SIVU','TYÖKALUT','More Lisää','Settings Asetukset','Valmis • Avaa PDF','Search Hae PDF:stä…'),'sv':('Snabb • Fokuserad • PDF-arbetsyta','FIL','ANTECKNINGAR','VY','SIDA','VERKTYG','More Mer','Settings Inställningar','Redo • Öppna en PDF','Search Sök i PDF…'),'el':('Γρήγορο • Εστιασμένο • PDF','ΑΡΧΕΙΟ','ΣΧΟΛΙΑΣΜΟΣ','ΠΡΟΒΟΛΗ','ΣΕΛΙΔΑ','ΕΡΓΑΛΕΙΑ','More Περισσότερα','Settings Ρυθμίσεις','Έτοιμο • Ανοίξτε PDF','Search Αναζήτηση στο PDF…'),'ar':('سريع • مركز • مساحة عمل PDF','ملف','تعليقات','عرض','صفحة','أدوات','More المزيد','Settings الإعدادات','جاهز • افتح ملف PDF','Search البحث داخل PDF…')}
@@ -781,6 +1140,8 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
     def go_to_page(self, val):
         if self.doc and 1 <= val <= self.doc.page_count:
             self.current_page = val - 1
+            if self._last_search_page != self.current_page:
+                self.search_highlight = None
             self._apply_fit() if self.fit_mode in ('width','page') else self.render_page()
 
     def erase_at_point(self, page, pdf_pt):
@@ -798,6 +1159,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
             erased = True
 
         if erased:
+            self.mark_document_modified()
             self.render_page()
 
     def wheelEvent(self, event):
@@ -833,49 +1195,119 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
             self.statusBar().showMessage(f"Lo-Fi: {error_string}", 5000)
 
     def print_document(self):
-        if not self.doc: return
+        if not self.doc:
+            return
         printer = QPrinter(QPrinter.HighResolution)
         print_dialog = QPrintDialog(printer, self)
-        
-        if print_dialog.exec() == QPrintDialog.Accepted:
-            painter = QPainter(printer)
-            page = self.doc.load_page(self.current_page)
-            
-            pix = page.get_pixmap(dpi=300)
-            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
-            
-            rect = painter.viewport()
-            scaled_img = img.scaled(rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            
-            x = (rect.width() - scaled_img.width()) // 2
-            y = (rect.height() - scaled_img.height()) // 2
-            
-            painter.drawImage(x, y, scaled_img)
+        if print_dialog.exec() != QPrintDialog.Accepted:
+            return
+        painter = QPainter(printer)
+        if not painter.isActive():
+            QMessageBox.critical(self, "Print failed", "Could not initialize the printer.")
+            return
+        try:
+            for page_index in range(self.doc.page_count):
+                if page_index > 0 and not printer.newPage():
+                    raise RuntimeError("The printer could not start a new page.")
+                page = self.doc.load_page(page_index)
+                pix = page.get_pixmap(dpi=180, alpha=False)
+                img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
+                rect = painter.viewport()
+                scaled_img = img.scaled(rect.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                x = (rect.width() - scaled_img.width()) // 2
+                y = (rect.height() - scaled_img.height()) // 2
+                painter.drawImage(x, y, scaled_img)
+            self.statusBar().showMessage(f"Printed {self.doc.page_count} pages", 5000)
+        except Exception as exc:
+            QMessageBox.critical(self, "Print failed", str(exc))
+        finally:
             painter.end()
 
+    def _save_to_path(self, save_path, save_options=None, password_after=None):
+        if not self.doc:
+            return False
+        save_path = ensure_pdf_extension(os.path.abspath(os.path.expanduser(save_path)))
+        output_dir = os.path.dirname(save_path) or os.getcwd()
+        source_path = self.file_path
+        source_password = self._document_password
+        old_doc = self.doc
+        page_to_restore = self.current_page
+        temp_path = None
+        try:
+            fd, temp_path = tempfile.mkstemp(prefix=".parin-pdf-", suffix=".pdf", dir=output_dir)
+            os.close(fd)
+            os.unlink(temp_path)
+            options = {"garbage": 0 if self.large_file_mode else 4, "deflate": True}
+            if save_options:
+                options.update(save_options)
+            elif source_password:
+                # Preserve the original encryption when performing a normal save.
+                options["encryption"] = fitz.PDF_ENCRYPT_KEEP
+            old_doc.save(temp_path, **options)
+            old_doc.close()
+            self.doc = None
+            os.replace(temp_path, save_path)
+            temp_path = None
+            self.doc = fitz.open(save_path)
+            self._document_password = source_password if password_after is None else password_after
+            if self.doc.is_encrypted and self._document_password:
+                if not self.doc.authenticate(self._document_password):
+                    raise RuntimeError("The saved PDF could not be unlocked with the active password.")
+            self.file_path = save_path
+            self._document_dirty = False
+            self.current_page = min(page_to_restore, max(0, self.doc.page_count - 1))
+            self._thumbnail_cache.clear()
+            self._refresh_navigation()
+            self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
+            self._add_recent_file(save_path)
+            self.statusBar().showMessage(f"Saved {Path(save_path).name}", 5000)
+            return True
+        except Exception as exc:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
+            if self.doc is None or getattr(self.doc, "is_closed", False):
+                try:
+                    restore_path = source_path if os.path.isfile(source_path) else save_path
+                    self.doc = fitz.open(restore_path)
+                    if self.doc.is_encrypted and source_password:
+                        self.doc.authenticate(source_password)
+                    self.file_path = restore_path
+                    self._document_password = source_password
+                    self.current_page = min(page_to_restore, max(0, self.doc.page_count - 1))
+                    self.render_page()
+                except Exception:
+                    self.doc = None
+            QMessageBox.critical(self, "Save failed", f"Could not save the PDF.\\n\\n{exc}")
+            return False
+
     def save_file(self):
-        if not self.doc: return
-        save_path, _ = QFileDialog.getSaveFileName(self, "ذخیره فایل", self.file_path, "PDF (*.pdf)")
-        if save_path:
-            self.doc.save(save_path, garbage=0 if self.large_file_mode else 4, deflate=True)
-            QMessageBox.information(self, "موفقیت", "فایل با موفقیت ذخیره شد.")
+        if not self.doc:
+            return False
+        save_path, _ = QFileDialog.getSaveFileName(self, "Save PDF", self.file_path, "PDF (*.pdf)")
+        if not save_path:
+            return False
+        return self._save_to_path(save_path)
 
     def remove_password(self):
-        if not self.doc: return
-        save_path, _ = QFileDialog.getSaveFileName(self, "ذخیره بدون رمز", "unlocked.pdf", "PDF (*.pdf)")
-        if save_path: 
-            self.doc.save(save_path, encryption=fitz.PDF_ENCRYPT_NONE, garbage=4, deflate=True)
-            QMessageBox.information(self, "موفقیت", "رمز فایل برداشته شد.")
+        if not self.doc:
+            return
+        save_path, _ = QFileDialog.getSaveFileName(self, "Save without password", "unlocked.pdf", "PDF (*.pdf)")
+        if save_path:
+            self._save_to_path(save_path, {"encryption": fitz.PDF_ENCRYPT_NONE}, password_after="")
 
     def add_password(self):
-        if not self.doc: return
+        if not self.doc:
+            return
         t = TRANSLATIONS[self.current_lang]
         pwd, ok = QInputDialog.getText(self, t["pass_add"], t["set_pass"], QLineEdit.Password)
-        if ok and pwd:
-            save_path, _ = QFileDialog.getSaveFileName(self, "ذخیره فایل رمزگذاری‌شده", "protected.pdf", "PDF (*.pdf)")
-            if save_path:
-                self.doc.save(save_path, encryption=fitz.PDF_ENCRYPT_AES_128, user_pw=pwd, owner_pw=pwd, garbage=4, deflate=True)
-                QMessageBox.information(self, "موفقیت", "رمز عبور با موفقیت اعمال شد.")
+        if not ok or not pwd:
+            return
+        save_path, _ = QFileDialog.getSaveFileName(self, "Save encrypted PDF", "protected.pdf", "PDF (*.pdf)")
+        if save_path:
+            self._save_to_path(save_path, {"encryption": fitz.PDF_ENCRYPT_AES_256, "user_pw": pwd, "owner_pw": pwd}, password_after=pwd)
 
     def apply_language(self, code):
         if code not in TRANSLATIONS:
@@ -909,6 +1341,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self.quick_search.setPlaceholderText(t['search'] + '…')
         QApplication.setLayoutDirection(t['dir'])
         self._retranslate_shell()
+        self._retranslate_navigation()
         self._update_page_indicator()
 
 
