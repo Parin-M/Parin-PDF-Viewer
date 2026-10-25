@@ -10,7 +10,7 @@ This branch contains development work for the next Parin PDF Viewer iteration. I
 - Full-document printing with per-page rendering and error reporting.
 - A navigation dock with the PDF's outline and an on-demand page-thumbnail list.
 - Search navigation across individual matches, including repeated matches on the same page.
-- A persistent recent-file menu and warnings for unsaved annotation changes.
+- A persistent recent-file menu, session restoration for the last opened PDF/page/zoom, and warnings for unsaved annotation changes.
 - Explicit runtime dependencies, regression tests, CI checks, and aligned Debian package versioning.
 
 ### Development setup
