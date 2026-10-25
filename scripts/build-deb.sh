@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+VERSION="9.0.0"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -31,12 +32,12 @@ install -m 0644 assets/parin-pdf.svg package/usr/share/icons/hicolor/scalable/ap
 mkdir -p package/DEBIAN
 cat > package/DEBIAN/control <<EOF
 Package: parin-pdf
-Version: 8.9.0
+Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: Parin
-Depends: libc6
+Depends: libc6, libstdc++6, libgcc-s1, libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libxcb-cursor0, libxcb-icccm4, libxcb-keysyms1, libxcb-shape0, libxcb-xinerama0, libxcb-randr0, libxcb-render-util0, libxcb-xfixes0, libxcb-xkb1, libdbus-1-3, libfontconfig1, libx11-xcb1
 Description: Parin - Modern PDF workspace
  Modern desktop PDF viewer built with PySide6 and PyMuPDF.
 EOF
@@ -50,8 +51,8 @@ exit 0
 EOF
 chmod 0755 package/DEBIAN/postinst
 
-dpkg-deb --build package "dist-deb/parin-pdf_8.9.0_amd64.deb"
+dpkg-deb --build package "dist-deb/parin-pdf_${VERSION}_amd64.deb"
 
 echo
 echo "SUCCESS:"
-echo "  $ROOT/dist-deb/parin-pdf_8.9.0_amd64.deb"
+echo "  $ROOT/dist-deb/parin-pdf_${VERSION}_amd64.deb"
