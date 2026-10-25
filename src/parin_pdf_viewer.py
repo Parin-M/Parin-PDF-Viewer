@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
-from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_files, ensure_pdf_extension, clamp_zoom
+from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_files, ensure_pdf_extension, same_path, clamp_zoom
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -439,6 +439,13 @@ class ParinPDFViewer(QMainWindow):
 
         self.settings_store = QSettings('Parin', 'ParinPDFViewer')
         self.recent_files = normalize_recent_files(self.settings_store.value('recent_files', []))
+        self._last_session_file = self.settings_store.value('last_file', '', type=str)
+        self._last_session_page = self.settings_store.value('last_page', 1, type=int)
+        try:
+            self._last_session_zoom = float(self.settings_store.value('last_zoom', 1.0))
+        except (TypeError, ValueError):
+            self._last_session_zoom = 1.0
+        self._last_session_fit_mode = self.settings_store.value('last_fit_mode', 'width', type=str)
         self._thumbnail_cache = OrderedDict()
         self._last_search_query = ''
         self._last_search_page = -1
@@ -502,6 +509,8 @@ class ParinPDFViewer(QMainWindow):
         self.apply_language(self.current_lang)
         self.apply_app_settings()
         self._install_shortcuts()
+        if self.app_settings.get('remember_last', True) and self._last_session_file and os.path.isfile(self._last_session_file):
+            QTimer.singleShot(0, lambda path=self._last_session_file: self.open_file(path, restore_session=True))
 
     def _install_shortcuts(self):
         for text,key,slot in [
@@ -756,6 +765,21 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
             except Exception:
                 continue
 
+    def _persist_reading_position(self):
+        if not self.app_settings.get('remember_last', True):
+            self.settings_store.setValue('last_file', '')
+            return
+        if not self.doc or not self.file_path:
+            return
+        self._last_session_file = self.file_path
+        self._last_session_page = self.current_page + 1
+        self._last_session_zoom = clamp_zoom(self.zoom_factor)
+        self._last_session_fit_mode = self.fit_mode if self.fit_mode in ('width', 'page') else 'custom'
+        self.settings_store.setValue('last_file', self._last_session_file)
+        self.settings_store.setValue('last_page', self._last_session_page)
+        self.settings_store.setValue('last_zoom', self._last_session_zoom)
+        self.settings_store.setValue('last_fit_mode', self._last_session_fit_mode)
+
     def _refresh_recent_menu(self):
         if not hasattr(self, "recent_menu"):
             return
@@ -806,6 +830,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         if not self._confirm_unsaved_changes():
             event.ignore()
             return
+        self._persist_reading_position()
         try:
             self.player.stop()
         except Exception:
@@ -854,7 +879,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         text_color = "#FFFFFF" if self.selected_color.lightness() < 128 else "#000000"
         self.btn_color.setStyleSheet(f"background-color: {hex_color}; color: {text_color}; border-radius: 8px;")
 
-    def open_file(self, selected_path=None):
+    def open_file(self, selected_path=None, restore_session=False):
         file_path = selected_path
         if not file_path:
             file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF documents (*.pdf)")
@@ -903,17 +928,26 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
             self.zoom_factor = 1.0
             self.rotation = {"0°": 0, "90°": 90, "180°": 180, "270°": 270}.get(self.app_settings.get("rotation", "0°"), 0)
             self.fit_mode = {"Fit Width": "width", "Fit Page": "page", "100%": None}.get(self.app_settings.get("fit_mode", "Fit Width"), "width")
+            if restore_session and self.app_settings.get("remember_last", True) and same_path(file_path, self._last_session_file):
+                self.current_page = max(0, min(self.doc.page_count - 1, self._last_session_page - 1))
+                if self.app_settings.get("restore_zoom", True):
+                    if self._last_session_fit_mode in ("width", "page"):
+                        self.fit_mode = self._last_session_fit_mode
+                    else:
+                        self.fit_mode = None
+                        self.zoom_factor = clamp_zoom(self._last_session_zoom)
             self.spin_page.blockSignals(True)
             self.spin_page.setMaximum(self.doc.page_count)
-            self.spin_page.setValue(1)
+            self.spin_page.setValue(self.current_page + 1)
             self.spin_page.blockSignals(False)
             self._last_search_query = ""
             self._last_search_page = -1
             self._last_search_rect_index = -1
             self.search_highlight = None
             self._refresh_navigation()
-            self.fit_width()
+            self._apply_fit() if self.fit_mode in ('width', 'page') else self.render_page()
             self._add_recent_file(file_path)
+            self._persist_reading_position()
             self.statusBar().showMessage(f"Opened {Path(file_path).name} · {self.doc.page_count} pages", 5000)
         except Exception as exc:
             if candidate is not None:
@@ -944,6 +978,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
                 self._schedule_thumbnail_refresh()
             self._update_page_indicator()
             self.page_label.update()
+            self._persist_reading_position()
         except Exception as exc:
             self.statusBar().showMessage(f"Could not render page {self.current_page + 1}: {exc}", 6000)
 
