@@ -31,7 +31,7 @@ install -m 0644 assets/parin-pdf.svg package/usr/share/icons/hicolor/scalable/ap
 mkdir -p package/DEBIAN
 cat > package/DEBIAN/control <<EOF
 Package: parin-pdf
-Version: 8.8.0
+Version: 8.9.0
 Section: utils
 Priority: optional
 Architecture: amd64
@@ -50,8 +50,8 @@ exit 0
 EOF
 chmod 0755 package/DEBIAN/postinst
 
-dpkg-deb --build package "dist-deb/parin-pdf_8.8.0_amd64.deb"
+dpkg-deb --build package "dist-deb/parin-pdf_8.9.0_amd64.deb"
 
 echo
 echo "SUCCESS:"
-echo "  $ROOT/dist-deb/parin-pdf_8.8.0_amd64.deb"
+echo "  $ROOT/dist-deb/parin-pdf_8.9.0_amd64.deb"
