@@ -45,7 +45,7 @@ for _lang, _items in TRANSLATIONS.items():
     for _key, _value in list(_items.items()):
         if isinstance(_value, str): _items[_key] = clean_label(_value)
     if isinstance(_items.get('title'), str):
-        _items['title'] = re.sub(r'v\\d+\\.\\d+(?:\\.\\d+)?', f"v{'.'.join(APP_VERSION.split('.')[:2])}", _items['title'])
+        _items['title'] = re.sub(r'v\d+\.\d+(?:\.\d+)?', f"v{'.'.join(APP_VERSION.split('.')[:2])}", _items['title'])
 
 LOFI_STREAM_URL = "https://stream.zeno.fm/f3wvbbqmdg8uv"
 
