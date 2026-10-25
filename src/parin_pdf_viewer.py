@@ -749,7 +749,10 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
                 item.setIcon(icon)
                 self._thumbnail_cache[index] = icon
                 while len(self._thumbnail_cache) > 40:
-                    self._thumbnail_cache.popitem(last=False)
+                    expired_index, _ = self._thumbnail_cache.popitem(last=False)
+                    expired_item = self.page_list.item(expired_index)
+                    if expired_item is not None:
+                        expired_item.setIcon(QIcon())
             except Exception:
                 continue
 
