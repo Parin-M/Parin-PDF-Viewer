@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
-from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_files, ensure_pdf_extension, same_path, clamp_zoom
+from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_files, ensure_pdf_extension, clamp_zoom
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -44,6 +44,8 @@ TRANSLATIONS = {
 for _lang, _items in TRANSLATIONS.items():
     for _key, _value in list(_items.items()):
         if isinstance(_value, str): _items[_key] = clean_label(_value)
+    if isinstance(_items.get('title'), str):
+        _items['title'] = re.sub(r'v\\d+\\.\\d+(?:\\.\\d+)?', f"v{'.'.join(APP_VERSION.split('.')[:2])}", _items['title'])
 
 LOFI_STREAM_URL = "https://stream.zeno.fm/f3wvbbqmdg8uv"
 
@@ -599,6 +601,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self._build_navigation_dock()
 
     def _build_navigation_dock(self):
+        self._navigation_needs_refresh = True
         self.navigation_dock = QDockWidget("Navigation", self)
         self.navigation_dock.setObjectName("navigation_dock")
         self.navigation_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
@@ -638,6 +641,10 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
     def _refresh_navigation(self):
         if not hasattr(self, "page_list"):
             return
+        if hasattr(self, "navigation_dock") and not self.navigation_dock.isVisible():
+            self._navigation_needs_refresh = True
+            return
+        self._navigation_needs_refresh = False
         self._thumbnail_cache.clear()
         self.page_list.blockSignals(True)
         self.page_list.clear()
@@ -680,6 +687,8 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
 
     def _load_visible_thumbnails(self):
         if not self.doc or not hasattr(self, "page_list") or self.page_list.count() == 0:
+            return
+        if hasattr(self, "navigation_dock") and not self.navigation_dock.isVisible():
             return
         first = self.page_list.indexAt(QPoint(5, 5)).row()
         if first < 0:
@@ -886,7 +895,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
             img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
             self.page_label.setPixmap(QPixmap.fromImage(img))
             self.page_label.adjustSize()
-            if hasattr(self, "page_list") and 0 <= self.current_page < self.page_list.count() and self.page_list.currentRow() != self.current_page:
+            if not self._navigation_needs_refresh and hasattr(self, "page_list") and 0 <= self.current_page < self.page_list.count() and self.page_list.currentRow() != self.current_page:
                 self.page_list.blockSignals(True)
                 self.page_list.setCurrentRow(self.current_page)
                 self.page_list.blockSignals(False)
@@ -1154,6 +1163,9 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
             options = {"garbage": 0 if self.large_file_mode else 4, "deflate": True}
             if save_options:
                 options.update(save_options)
+            elif source_password:
+                # Preserve the original encryption when performing a normal save.
+                options["encryption"] = fitz.PDF_ENCRYPT_KEEP
             old_doc.save(temp_path, **options)
             old_doc.close()
             self.doc = None
