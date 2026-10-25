@@ -1,17 +1,16 @@
 # Parin PDF Viewer
 
-## Development branch: 8.9.0
+## Development branch: 9.0.0
 
 This branch contains development work for the next Parin PDF Viewer iteration. It is **not a published release** until the automated checks pass and the maintainer reviews the changes.
 
-### What is changing in 8.9
+### What is changing in 9.0
 
-- Safer PDF loading and atomic saves to reduce the risk of losing a document when an open, password, or write operation fails.
-- Full-document printing with per-page rendering and error reporting.
-- A navigation dock with the PDF's outline and an on-demand page-thumbnail list.
-- Search navigation across individual matches, including repeated matches on the same page.
-- A persistent recent-file menu, session restoration for the last opened PDF/page/zoom, and warnings for unsaved annotation changes.
-- Explicit runtime dependencies, regression tests, CI checks, and aligned Debian package versioning.
+- Everything in the 8.9 development branch, including safer loading/saving, navigation, search, recent files, session restoration, and full-document printing.
+- A localized About page under Settings, with the exact project credit, application version, GitHub repository, GPL-3.0 license, and a copy-version button.
+- A drag-and-drop page organizer to reorder, rotate, delete, and extract pages, plus insertion from another PDF.
+- Ctrl+Z / Ctrl+Y undo and redo for annotations and supported page operations, with bounded history to limit memory use.
+- CI regression tests and a Debian package artifact built by GitHub Actions.
 
 ### Development setup
 
@@ -23,7 +22,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests
 ```
 
-To build the Debian package on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
+GitHub Actions builds the `.deb` file as `parin-pdf_9.0.0_amd64.deb` and uploads it as the `parin-pdf-9.0.0-deb` workflow artifact. To build locally on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
 
 ---
 
