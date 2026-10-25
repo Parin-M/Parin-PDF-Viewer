@@ -405,6 +405,22 @@ QFormLayout QLabel{{color:#253246;}}
         self.settings.update(self.collect()); self.viewer.app_settings.update(self.settings); self.viewer.apply_app_settings(); self.settings_changed.emit(self.settings)
     def accept(self): self.apply_changes(); super().accept()
 
+
+NAVIGATION_I18N = {
+    "en": {"dock":"Navigation","outline":"Outline","pages":"Pages","page":"Page {n}","nav_action":"Navigation Panel","recent":"Open Recent","no_recent":"No recent files","clear_recent":"Clear Recent Files","no_outline":"No outline in this PDF"},
+    "fa": {"dock":"ناوبری","outline":"فهرست","pages":"صفحات","page":"صفحهٔ {n}","nav_action":"پنل ناوبری","recent":"فایل‌های اخیر","no_recent":"فایل اخیری وجود ندارد","clear_recent":"پاک‌کردن فهرست فایل‌های اخیر","no_outline":"این PDF فهرست داخلی ندارد"},
+    "de": {"dock":"Navigation","outline":"Gliederung","pages":"Seiten","page":"Seite {n}","nav_action":"Navigationsbereich","recent":"Zuletzt geöffnet","no_recent":"Keine zuletzt verwendeten Dateien","clear_recent":"Liste leeren","no_outline":"Keine Gliederung in dieser PDF"},
+    "es": {"dock":"Navegación","outline":"Esquema","pages":"Páginas","page":"Página {n}","nav_action":"Panel de navegación","recent":"Archivos recientes","no_recent":"No hay archivos recientes","clear_recent":"Borrar recientes","no_outline":"Este PDF no tiene índice"},
+    "fr": {"dock":"Navigation","outline":"Sommaire","pages":"Pages","page":"Page {n}","nav_action":"Panneau de navigation","recent":"Fichiers récents","no_recent":"Aucun fichier récent","clear_recent":"Effacer les récents","no_outline":"Aucun sommaire dans ce PDF"},
+    "da": {"dock":"Navigation","outline":"Oversigt","pages":"Sider","page":"Side {n}","nav_action":"Navigationspanel","recent":"Seneste filer","no_recent":"Ingen seneste filer","clear_recent":"Ryd seneste","no_outline":"Ingen oversigt i PDF-filen"},
+    "no": {"dock":"Navigasjon","outline":"Disposisjon","pages":"Sider","page":"Side {n}","nav_action":"Navigasjonspanel","recent":"Nylige filer","no_recent":"Ingen nylige filer","clear_recent":"Tøm nylige","no_outline":"Ingen disposisjon i PDF-filen"},
+    "fi": {"dock":"Siirtyminen","outline":"Jäsennys","pages":"Sivut","page":"Sivu {n}","nav_action":"Siirtymispaneeli","recent":"Viimeisimmät tiedostot","no_recent":"Ei viimeisimpiä tiedostoja","clear_recent":"Tyhjennä viimeisimmät","no_outline":"PDF ei sisällä jäsennystä"},
+    "sv": {"dock":"Navigering","outline":"Disposition","pages":"Sidor","page":"Sida {n}","nav_action":"Navigeringspanel","recent":"Senaste filer","no_recent":"Inga senaste filer","clear_recent":"Rensa senaste","no_outline":"Ingen disposition i PDF-filen"},
+    "el": {"dock":"Πλοήγηση","outline":"Διάρθρωση","pages":"Σελίδες","page":"Σελίδα {n}","nav_action":"Πίνακας πλοήγησης","recent":"Πρόσφατα αρχεία","no_recent":"Δεν υπάρχουν πρόσφατα αρχεία","clear_recent":"Εκκαθάριση πρόσφατων","no_outline":"Το PDF δεν έχει διάρθρωση"},
+    "ar": {"dock":"التنقل","outline":"المخطط","pages":"الصفحات","page":"الصفحة {n}","nav_action":"لوحة التنقل","recent":"الملفات الأخيرة","no_recent":"لا توجد ملفات حديثة","clear_recent":"مسح الملفات الأخيرة","no_outline":"لا يوجد مخطط في هذا الـ PDF"},
+}
+
+
 class ParinPDFViewer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -588,9 +604,9 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         for text,slot,ikey in [("Search PDF",self.search_pdf,"Search"),("Remove Password",self.remove_password,"Remove"),("Set Password",self.add_password,"Set"),("Settings",self.open_settings,"Settings")]:
             a=QAction(text,self); a.setIcon(make_action_icon(ICON_GLYPHS.get(ikey,"•"),22,THEME_ACCENTS.get(self.app_settings.get("theme","Arctic Glass"),(58,141,255)))); a.triggered.connect(slot); more.addAction(a); self.more_actions.append(a)
         more.addSeparator()
-        nav_action = more.addAction("Navigation Panel")
-        nav_action.triggered.connect(self.toggle_navigation_panel)
-        self.recent_menu = more.addMenu("Open Recent")
+        self.navigation_action = more.addAction(self._nav_text("nav_action"))
+        self.navigation_action.triggered.connect(self.toggle_navigation_panel)
+        self.recent_menu = more.addMenu(self._nav_text("recent"))
         self.recent_menu.aboutToShow.connect(self._refresh_recent_menu)
         self.btn_more.setMenu(more); row2.addWidget(self.btn_more); row2.addStretch(); tl.addLayout(row2)
         self.main_layout.addWidget(self.tool_area)
@@ -602,7 +618,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
 
     def _build_navigation_dock(self):
         self._navigation_needs_refresh = True
-        self.navigation_dock = QDockWidget("Navigation", self)
+        self.navigation_dock = QDockWidget(self._nav_text("dock"), self)
         self.navigation_dock.setObjectName("navigation_dock")
         self.navigation_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         self.navigation_tabs = QTabWidget(self.navigation_dock)
@@ -614,8 +630,8 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self.page_list.setUniformItemSizes(True)
         self.page_list.currentRowChanged.connect(self._navigate_page_list)
         self.page_list.verticalScrollBar().valueChanged.connect(self._schedule_thumbnail_refresh)
-        self.navigation_tabs.addTab(self.outline_tree, "Outline")
-        self.navigation_tabs.addTab(self.page_list, "Pages")
+        self.navigation_tabs.addTab(self.outline_tree, self._nav_text("outline"))
+        self.navigation_tabs.addTab(self.page_list, self._nav_text("pages"))
         self.navigation_dock.setWidget(self.navigation_tabs)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.navigation_dock)
         self.navigation_dock.hide()
@@ -623,6 +639,25 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self._thumbnail_refresh_timer.setSingleShot(True)
         self._thumbnail_refresh_timer.setInterval(80)
         self._thumbnail_refresh_timer.timeout.connect(self._load_visible_thumbnails)
+
+    def _nav_text(self, key, **kwargs):
+        language = NAVIGATION_I18N.get(self.current_lang, NAVIGATION_I18N["en"])
+        template = language.get(key, NAVIGATION_I18N["en"].get(key, key))
+        try:
+            return template.format(**kwargs)
+        except (KeyError, ValueError):
+            return template
+
+    def _retranslate_navigation(self):
+        if not hasattr(self, "navigation_dock"):
+            return
+        self.navigation_dock.setWindowTitle(self._nav_text("dock"))
+        self.navigation_action.setText(self._nav_text("nav_action"))
+        self.recent_menu.setTitle(self._nav_text("recent"))
+        self.navigation_tabs.setTabText(0, self._nav_text("outline"))
+        self.navigation_tabs.setTabText(1, self._nav_text("pages"))
+        if self.navigation_dock.isVisible():
+            self._refresh_navigation()
 
     def toggle_navigation_panel(self):
         self.navigation_dock.setVisible(not self.navigation_dock.isVisible())
@@ -650,7 +685,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self.page_list.clear()
         if self.doc:
             for index in range(self.doc.page_count):
-                item = QListWidgetItem(f"Page {index + 1}")
+                item = QListWidgetItem(self._nav_text("page", n=index + 1))
                 item.setData(Qt.UserRole, index)
                 self.page_list.addItem(item)
             self.page_list.setCurrentRow(self.current_page if self.current_page < self.page_list.count() else 0)
@@ -675,6 +710,10 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
                     else:
                         self.outline_tree.addTopLevelItem(item)
                     stack.append((level, item))
+                if self.outline_tree.topLevelItemCount() == 0:
+                    empty = QTreeWidgetItem([self._nav_text("no_outline")])
+                    empty.setDisabled(True)
+                    self.outline_tree.addTopLevelItem(empty)
                 self.outline_tree.expandToDepth(1)
             except Exception as exc:
                 self.statusBar().showMessage(f"Could not read PDF outline: {exc}", 5000)
@@ -720,7 +759,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self.recent_menu.clear()
         existing = [path for path in self.recent_files if os.path.isfile(path)]
         if not existing:
-            empty = self.recent_menu.addAction("No recent files")
+            empty = self.recent_menu.addAction(self._nav_text("no_recent"))
             empty.setEnabled(False)
         else:
             for path in existing:
@@ -728,7 +767,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
                 action.setToolTip(path)
                 action.triggered.connect(lambda checked=False, selected=path: self.open_file(selected))
         self.recent_menu.addSeparator()
-        clear_action = self.recent_menu.addAction("Clear Recent Files")
+        clear_action = self.recent_menu.addAction(self._nav_text("clear_recent"))
         clear_action.triggered.connect(self.clear_recent_files)
 
     def _add_recent_file(self, file_path):
@@ -1264,6 +1303,7 @@ QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
         self.quick_search.setPlaceholderText(t['search'] + '…')
         QApplication.setLayoutDirection(t['dir'])
         self._retranslate_shell()
+        self._retranslate_navigation()
         self._update_page_indicator()
 
 
