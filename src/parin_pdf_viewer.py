@@ -6,7 +6,7 @@ import tempfile
 from collections import OrderedDict
 from pathlib import Path
 import pymupdf as fitz  # PyMuPDF (modern API; avoids deprecated fitz import)
-from PySide6.QtCore import Qt, QUrl, QPoint, QPointF, QTimer, QSettings, Signal, QSize, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QUrl, QPoint, QPointF, QRectF, QTimer, QSettings, Signal, QSize, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QLineEdit, QScrollArea, 
@@ -128,7 +128,7 @@ class PDFPageLabel(QLabel):
             painter.setRenderHint(QPainter.Antialiasing)
             painter.setPen(QPen(QColor("#FFB300"), 2))
             painter.setBrush(QColor(255, 193, 7, 52))
-            painter.drawRoundedRect(rect.x0, rect.y0, rect.width, rect.height, 3, 3)
+            painter.drawRoundedRect(QRectF(rect.x0, rect.y0, rect.width, rect.height), 3.0, 3.0)
             painter.end()
         except Exception:
             return
