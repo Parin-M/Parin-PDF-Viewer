@@ -16,6 +16,7 @@ This entry describes the changes in the `feature/v8.9` development branch. It is
 - Render page thumbnails on demand and keep a bounded thumbnail cache for large documents.
 - Cycle through text matches, including multiple matches on the same page, and highlight the selected result.
 - Remember recently opened PDFs and allow reopening or clearing the recent-file list.
+- Restore the last opened PDF, page, and zoom when the corresponding preferences are enabled.
 - Print all pages instead of printing only the currently viewed page.
 
 ### Packaging and quality
