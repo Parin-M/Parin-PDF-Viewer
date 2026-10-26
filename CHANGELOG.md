@@ -16,6 +16,8 @@ Continues from `feature/v9.0` without changing `main`.
 - Document the limitation explicitly: this lightweight helper stabilizes ink paths but does not claim handwriting-to-text recognition.
 - Fix opening PDFs passed by the Linux desktop launcher (`%U` file URLs), include uppercase `.PDF` in the file picker, and retry password prompts without discarding the current document on cancellation/failure.
 - Add headless integration regressions for local file URLs, valid PDF loading, uppercase extensions, and failed-open recovery.
+- Fix a canvas sizing issue by keeping the scroll-area child at the exact rendered pixmap size instead of allowing `QScrollArea` to resize the PDF `QLabel` independently. This also keeps pen/highlighter preview coordinates aligned with the rendered page.
+- Add a rendered-content regression test that verifies the PDF bitmap is non-empty, correctly sized for the canvas, and contains the expected page pixels.
 
 ### Python + Rust architecture
 - Add an optional PyO3-based Rust native extension for zoom normalization.
