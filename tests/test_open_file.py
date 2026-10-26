@@ -73,6 +73,41 @@ class PdfOpenRegressionTests(unittest.TestCase):
                     viewer.close()
                     self.app.processEvents()
 
+    def test_opened_pdf_renders_a_visible_page_bitmap(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "visible-page.pdf"
+            document = fitz.open()
+            page = document.new_page()
+            page.draw_rect(fitz.Rect(100, 100, 400, 600), color=(1, 0, 0), fill=(1, 0, 0))
+            document.save(str(path))
+            document.close()
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                try:
+                    viewer.resize(1280, 850)
+                    viewer.show()
+                    self.app.processEvents()
+                    viewer.open_file(str(path))
+                    self.app.processEvents()
+
+                    pixmap = viewer.page_label.pixmap()
+                    self.assertIsNotNone(pixmap)
+                    self.assertFalse(pixmap.isNull(), "PDF renderer must create an image")
+                    self.assertGreater(pixmap.width(), 300, "fit-width rendering should use the available canvas")
+                    self.assertEqual(viewer.page_label.size(), pixmap.size())
+                    self.assertIs(viewer.workspace_stack.currentWidget(), viewer.scroll_area)
+
+                    rendered = pixmap.toImage()
+                    x = max(1, min(pixmap.width() - 1, int(250 * viewer.zoom_factor)))
+                    y = max(1, min(pixmap.height() - 1, int(250 * viewer.zoom_factor)))
+                    color = rendered.pixelColor(x, y)
+                    self.assertGreater(color.red(), 200, f"Expected red page content at ({x}, {y}), got {color.name()}")
+                    self.assertLess(color.green(), 100, f"Expected red page content at ({x}, {y}), got {color.name()}")
+                finally:
+                    viewer.close()
+                    self.app.processEvents()
+
     def test_failed_open_keeps_current_document_available(self):
         with tempfile.TemporaryDirectory() as folder:
             good_path = Path(folder) / "good.pdf"
