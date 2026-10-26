@@ -117,7 +117,7 @@ THEME_ACCENTS = {name: tuple(int(accent[i:i+2],16) for i in (1,3,5)) for name,_,
 ICON_GLYPHS={'Open':'▱','Save':'↓','Print':'▤','Pen':'✎','Highlight':'✦','Eraser':'⌫','Text':'T','Color':'●','Fit':'□','Prev':'‹','Next':'›','Rotate':'⟳','Fullscreen':'⛶','Lo-Fi':'♫','Settings':'⚙','Language':'文','More':'⋯'}
 def make_action_icon(symbol,size=20,accent=(80,180,255)):
     pm=QPixmap(size,size); pm.fill(Qt.transparent); painter=QPainter(pm); painter.setRenderHint(QPainter.Antialiasing)
-    grad=QLinearGradient(0,0,size,size); grad.setColorAt(0,QColor(*accent)); grad.setColorAt(1,QColor(142,76,255)); painter.setBrush(grad); painter.setPen(Qt.NoPen); painter.drawEllipse(1,1,size-2,size-2)
+    base=QColor(*accent); grad=QLinearGradient(0,0,size,size); grad.setColorAt(0,base); grad.setColorAt(1,base.lighter(118)); painter.setBrush(grad); painter.setPen(Qt.NoPen); painter.drawEllipse(1,1,size-2,size-2)
     painter.setPen(QColor(255,255,255,235)); painter.setFont(QFont('DejaVu Sans',max(8,int(size*.52)),QFont.Bold)); painter.drawText(pm.rect(),Qt.AlignCenter,symbol); painter.end(); return QIcon(pm)
 
 
@@ -710,18 +710,28 @@ class ParinPDFViewer(QMainWindow):
         self.settings_store.setValue('settings',str(self.app_settings))
         for k,v in self.app_settings.items(): self.settings_store.setValue(k,v)
         base=self._style_for_theme(); accent=THEME_ACCENTS.get(self.app_settings.get('theme','Arctic Glass'),(58,141,255)); ah='#%02X%02X%02X'%accent
-        common=f'''QWidget#app_header{{background:rgba(255,255,255,0.96);border-bottom:1px solid #E1E9F3;}}
-QLabel#brand_title{{font-size:21px;font-weight:800;color:#172B49;}}
-QLabel#brand_subtitle{{font-size:10px;color:#6B7B92;}}
-QFrame#tool_area{{background:rgba(244,248,253,0.98);border-bottom:1px solid #E1E9F3;}}
-QFrame#tool_group{{background:rgba(255,255,255,0.98);border:1px solid #DCE5F0;border-radius:13px;}}
-QLabel#group_label{{font-size:9px;font-weight:800;color:#74839A;padding:0 6px;letter-spacing:0.5px;}}
-QLineEdit#quick_search,QLineEdit{{min-height:38px;}}
-QStatusBar{{background:rgba(255,255,255,0.96);color:#65758C;border-top:1px solid #E1E9F3;}}
+        common=f'''QWidget#app_header{{background:#10243F;border-bottom:1px solid #1C3B60;}}
+QLabel#brand_title{{font-size:22px;font-weight:800;color:#FFFFFF;letter-spacing:0.2px;}}
+QLabel#brand_subtitle{{font-size:10px;color:#B8C7DA;}}
+QFrame#tool_area{{background:#EEF3F9;border-bottom:1px solid #DCE5EF;}}
+QFrame#tool_group{{background:#FFFFFF;border:1px solid #D9E3EF;border-radius:13px;}}
+QLabel#group_label{{font-size:9px;font-weight:800;color:#73839A;padding:0 6px;letter-spacing:0.6px;}}
+QLineEdit#quick_search{{min-height:38px;background:#F8FAFD;color:#172B49;border:1px solid #D4DFED;border-radius:11px;padding:7px 12px;selection-background-color:{ah};selection-color:#FFFFFF;}}
+QLineEdit#quick_search:focus{{background:#FFFFFF;border:2px solid {ah};}}
+QStatusBar{{background:#FFFFFF;color:#65758C;border-top:1px solid #DCE5EF;}}
+QStatusBar::item{{border:none;}}
 QPushButton:hover{{border-color:{ah};}}
 QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
-QFrame#page_canvas{{background:#EAF0F7;border:1px solid #D8E2EF;border-radius:16px;}}
-QScrollArea#document_scroll{{background:transparent;border:none;}}
+QFrame#app_header QPushButton{{background:rgba(255,255,255,0.08);color:#F5F8FC;border:1px solid #35506F;border-radius:10px;padding:8px 12px;font-weight:600;}}
+QFrame#app_header QPushButton:hover{{background:#23466F;border-color:{ah};}}
+QFrame#app_header QPushButton:pressed{{background:#1B395E;border-color:{ah};}}
+QFrame#app_header QPushButton:disabled{{background:rgba(255,255,255,0.04);color:#71849D;border-color:#2A405B;}}
+QFrame#page_canvas{{background:#EDF2F8;border:1px solid #D8E2EF;border-radius:16px;}}
+QScrollArea#document_scroll{{background:#EDF2F8;border:none;}}
+QScrollArea#document_scroll QWidget#qt_scrollarea_viewport{{background:#EDF2F8;border:none;}}
+QScrollArea#document_scroll QLabel{{background:transparent;}}
+QDockWidget{{color:#23334D;font-weight:700;}}
+QDockWidget::title{{background:#F5F8FC;padding:9px 12px;border-bottom:1px solid #DCE5EF;}}
 QDialog{{background:#F8FAFD;}}
 '''
         self.setStyleSheet(base+common)
@@ -747,7 +757,7 @@ QDialog{{background:#F8FAFD;}}
         self.main_layout=QVBoxLayout(central_widget); self.main_layout.setContentsMargins(0,0,0,0); self.main_layout.setSpacing(0)
 
         # Header / brand row
-        self.header=QFrame(); self.header.setObjectName("app_header"); hl=QHBoxLayout(self.header); hl.setContentsMargins(16,10,16,8); hl.setSpacing(10)
+        self.header=QFrame(); self.header.setObjectName("app_header"); self.header.setMinimumHeight(76); hl=QHBoxLayout(self.header); hl.setContentsMargins(20,12,20,12); hl.setSpacing(12)
         self.app_icon=QLabel(); self.app_icon.setPixmap(make_app_icon(46).pixmap(46,46)); hl.addWidget(self.app_icon)
         brand=QVBoxLayout(); self.brand_title=QLabel("Parin"); self.brand_title.setObjectName("brand_title"); self.brand_subtitle=QLabel("Fast • Focused • PDF workspace"); self.brand_subtitle.setObjectName("brand_subtitle"); brand.addWidget(self.brand_title); brand.addWidget(self.brand_subtitle); hl.addLayout(brand)
         hl.addStretch()
@@ -769,10 +779,10 @@ QDialog{{background:#F8FAFD;}}
         self.main_layout.addWidget(self.header)
 
         # Responsive, readable toolbar with clear groups
-        self.tool_area=QFrame(); self.tool_area.setObjectName("tool_area"); tl=QVBoxLayout(self.tool_area); tl.setContentsMargins(8,6,8,6); tl.setSpacing(5)
-        row1=QHBoxLayout(); row1.setSpacing(5); row2=QHBoxLayout(); row2.setSpacing(5); self.group_labels={}
+        self.tool_area=QFrame(); self.tool_area.setObjectName("tool_area"); tl=QVBoxLayout(self.tool_area); tl.setContentsMargins(10,7,10,7); tl.setSpacing(7)
+        row1=QHBoxLayout(); row1.setSpacing(6); row2=QHBoxLayout(); row2.setSpacing(6); self.group_labels={}
         def add_group(row,title,buttons):
-            box=QFrame(); box.setObjectName("tool_group"); gl=QHBoxLayout(box); gl.setContentsMargins(5,4,5,4); gl.setSpacing(4)
+            box=QFrame(); box.setObjectName("tool_group"); gl=QHBoxLayout(box); gl.setContentsMargins(6,5,6,5); gl.setSpacing(5)
             lab=QLabel(title); lab.setObjectName("group_label"); gl.addWidget(lab); self.group_labels[title]=lab
             for b in buttons: gl.addWidget(b)
             row.addWidget(box)
