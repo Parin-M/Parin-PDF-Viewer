@@ -5,9 +5,11 @@
 Continues from `feature/v9.0` without changing `main`.
 
 ### Interface refresh
-- Refine the shared Qt visual system with a calmer blue-gray palette, consistent rounded controls, clearer keyboard-focus states, improved tabs, menus, tooltips, and scrollbars.
-- Apply the approved workspace direction: a deep navy brand header with high-contrast title and controls, a coordinated search field, a pale blue-gray toolbar with separated white tool groups, and a neutral PDF canvas.
-- Align toolbar icon gradients with the selected theme accent and increase spacing in the header and tool groups while preserving the theme selector and localized interface.
+- Redesign the welcome screen with an Open PDF call to action, recent-document cards, first-page thumbnail previews, a clear-recent action, and PDF drag-and-drop support.
+- Refine the main workspace with a deep navy header, compact monochrome toolbar glyphs, grouped tool surfaces, a coordinated search field, a neutral PDF canvas, and a more useful persistent page/zoom/save-status strip.
+- Add a persistent Light/Dark appearance choice across the main window, menus, navigation dock, and Settings while preserving PDF page colours and the existing theme accent selection.
+- Improve the navigation dock and page thumbnail spacing, and apply the existing page-shadow preference to the rendered page.
+- Keep all existing PDF workflows and localization intact while applying the new styles.
 
 ### Python + Rust architecture
 - Add an optional PyO3-based Rust native extension for zoom normalization.
