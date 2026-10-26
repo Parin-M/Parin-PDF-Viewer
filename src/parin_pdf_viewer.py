@@ -511,7 +511,7 @@ class SettingsDialog(QDialog):
             if _lab is not None: _lab.setText(_txt); _lab.setVisible(True)
         self.language_label.setText(self.t.get('language','Interface language')); self._set_texts();
         _appearance_options={'en':('Light','Dark'),'fa':('روشن','تیره'),'de':('Hell','Dunkel'),'es':('Claro','Oscuro'),'fr':('Clair','Sombre'),'da':('Lys','Mørk'),'no':('Lys','Mørk'),'fi':('Vaalea','Tumma'),'sv':('Ljust','Mörkt'),'el':('Φωτεινό','Σκούρο'),'ar':('فاتح','داكن')}.get(self.lang,('Light','Dark'))
-        self.appearance_mode.setItemText(0,_appearance_options[0]); self.appearance_mode.setItemText(1,_appearance_options[1]); self.about_version.setText(f"{self.t.get('version','Version')} {APP_VERSION}"); self.about_credit.setText(ABOUT_ATTRIBUTION); self.about_repo.setText(f"<a href='https://github.com/Parin-M/Parin-PDF-Viewer'>{self.t.get('repository','GitHub repository')}</a>"); self.about_license.setText(f"{self.t.get('license','License')}: GPL-3.0"); self.about_copy_version.setText(self.t.get('copy_version','Copy version')); self.reset_btn.setText(self.t['reset']); self.buttons.button(QDialogButtonBox.Cancel).setText(self.t['cancel']); self.buttons.button(QDialogButtonBox.Apply).setText(self.t['apply']); self.buttons.button(QDialogButtonBox.Ok).setText(self.t['ok']); codes=['en','fa','da','de','es','no','fi','sv','fr','el','ar']; self.lang_combo.blockSignals(True); self.lang_combo.setCurrentIndex(codes.index(self.lang)); self.lang_combo.blockSignals(False); self.nav.setCurrentRow(min(self.nav.currentRow(),7)); self._apply_dialog_style()
+        self.appearance_mode.setItemText(0,_appearance_options[0]); self.appearance_mode.setItemText(1,_appearance_options[1]); self.about_version.setText(f"{self.t.get('version','Version')} {APP_VERSION}"); self.about_credit.setText(ABOUT_ATTRIBUTION); self.about_repo.setText(f"<a href='https://github.com/Parin-M/Parin-PDF-Viewer'>{self.t.get('repository','GitHub repository')}</a>"); self.about_license.setText(f"{self.t.get('license','License')}: GPL-3.0"); self.about_copy_version.setText(self.t.get('copy_version','Copy version')); self.reset_btn.setText(self.t['reset']); self.buttons.button(QDialogButtonBox.Cancel).setText(self.t['cancel']); self.buttons.button(QDialogButtonBox.Apply).setText(self.t['apply']); self.buttons.button(QDialogButtonBox.Ok).setText(self.t['ok']); codes=['en','fa','da','de','es','no','fi','sv','fr','el','ar']; self.lang_combo.blockSignals(True); self.lang_combo.setCurrentIndex(codes.index(self.lang)); self.lang_combo.blockSignals(False); self.nav.setCurrentRow(min(self.nav.currentRow(),7)); self._preview_style()
     def _set_texts(self):
         t=self.t; self.remember_last.setText(t['remember']); self.restore_zoom.setText(t['restore']); self.single_page.setText(t.get('single','Single-page reading mode')); self.confirm_close.setText(t['confirm']); self.status.setText(t['status']); self.center_page.setText(t['center']); self.page_shadow.setText(t['shadow']); self.appearance_label.setText(t.get('appearance_mode','Appearance mode')); self.theme_label.setText(t['theme']); self.accent_label.setText(t['accent']); self.aero.setText(t['aero']); self.large.setText(t['large']); self.show_icons.setText(t['toolbar']); self.compact.setText(t['compact']); self.animations.setText(t['animations']); self.theme_preview.setText(t.get('theme_preview','Material You Light • Live preview')); self.blue.setText(t['blue']); self.blue_label_title.setText(t['blue_strength']); self.warm.setText(t['night']); self.reduce_motion.setText(t['reduce']); self.contrast_label_title.setText(t['contrast']); self.fit.setItemText(0,t.get('fit_width','Fit Width')); self.fit.setItemText(1,t.get('fit_page','Fit Page')); self.fit.setItemText(2,t.get('fit_100','100%')); self.auto_fit.setText(t['autofit']); self.smooth_scroll.setText(t['scroll']); self.page_gap.setText(t['gap']); self.cache_pages.setText(t['cache']); self.smooth_render.setText(t.get('quality_render','High-quality rendering')); self.preload.setText(t['preload']); self.gpu.setText(t['gpu']); self.low_memory.setText(t['memory']); self.large_files.setText(t.get('large_files','Large PDF mode: pages are rendered on demand; the whole document is never loaded into RAM.')); self.audio_enabled.setText(t['audio_enabled']); self.autoplay.setText(t['autoplay']); self.volume_title.setText(t['volume']); self.shortcut_text.setText(t['shortcuts_desc']+'\n\nCtrl+O  '+t.get('open','Open')+'\nCtrl+S  '+t.get('save','Save')+'\nCtrl+F  '+t.get('search','Search')+'\nCtrl+0  '+t.get('reset_zoom','Reset zoom')+'\nF11  '+t.get('fullscreen','Fullscreen'))
     def _language_from_settings(self,index):
@@ -833,6 +833,8 @@ class ParinPDFViewer(QMainWindow):
         status_bg = "#111B2A" if dark else "#FFFFFF"
         dialog_bg = "#101827" if dark else "#F8FAFD"
         title_fg = "#F4F7FC" if dark else "#243650"
+        active_fill = "#243D5B" if dark else soft_tone(ah)
+        active_text = "#FFFFFF" if dark else "#142B4A"
         common=f'''QWidget#app_header{{background:{header_bg};border-bottom:1px solid {header_border};}}
 QLabel#brand_title{{font-size:22px;font-weight:800;color:#FFFFFF;letter-spacing:0.2px;}}
 QLabel#brand_subtitle{{font-size:10px;color:#B8C7DA;}}
@@ -846,7 +848,7 @@ QStatusBar::item{{border:none;}}
 QLabel#status_page,QLabel#status_zoom,QLabel#status_dirty{{color:{muted};padding:2px 8px;font-size:9pt;}}
 QLabel#status_dirty[dirty="true"]{{color:{'#FFB4A9' if dark else '#B5473C'};font-weight:700;}}
 QPushButton:hover{{border-color:{ah};}}
-QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
+QPushButton:checked{{background:{active_fill};border:2px solid {ah};color:{active_text};}}
 QFrame#app_header QPushButton{{background:rgba(255,255,255,0.08);color:#F5F8FC;border:1px solid #35506F;border-radius:10px;padding:8px 12px;font-weight:600;}}
 QFrame#app_header QPushButton:hover{{background:#23466F;border-color:{ah};}}
 QFrame#app_header QPushButton:pressed{{background:#1B395E;border-color:{ah};}}
@@ -1825,6 +1827,7 @@ QDialog{{background:{dialog_bg};}}
             if k in self.group_labels: self.group_labels[k].setText(label)
         more_names=[TRANSLATIONS[self.current_lang]['search']+' PDF',TRANSLATIONS[self.current_lang]['pass_remove'],TRANSLATIONS[self.current_lang]['pass_add'],vals[7]]
         for a,text in zip(getattr(self,'more_actions',[]),more_names): a.setText(text)
+        self._update_page_indicator()
 
     def move_current_page(self, delta):
         if not self.doc:
@@ -1841,14 +1844,27 @@ QDialog{{background:{dialog_bg};}}
         self._after_document_structure_change()
 
     def _update_page_indicator(self):
+        t=TRANSLATIONS.get(self.current_lang,TRANSLATIONS["en"])
         if hasattr(self,'lbl_page'):
-            t=TRANSLATIONS[self.current_lang]
             self.lbl_page.setText(f"{t['page']} {self.current_page+1} {t['of']} {self.doc.page_count if self.doc else 0}")
         if hasattr(self,"status_page"):
-            self.status_page.setText(f"Page {self.current_page+1} / {self.doc.page_count}" if self.doc else "No PDF open")
+            status_text = {
+                "en":("No PDF open","Ready","Saved","Unsaved changes"),
+                "fa":("PDF باز نیست","آماده","ذخیره‌شده","تغییرات ذخیره‌نشده"),
+                "de":("Keine PDF geöffnet","Bereit","Gespeichert","Ungespeicherte Änderungen"),
+                "es":("No hay PDF abierto","Listo","Guardado","Cambios sin guardar"),
+                "fr":("Aucun PDF ouvert","Prêt","Enregistré","Modifications non enregistrées"),
+                "da":("Ingen PDF åben","Klar","Gemt","Ikke-gemte ændringer"),
+                "no":("Ingen PDF åpen","Klar","Lagret","Ulagrede endringer"),
+                "fi":("PDF ei ole auki","Valmis","Tallennettu","Tallentamattomat muutokset"),
+                "sv":("Ingen PDF öppen","Redo","Sparad","Osparade ändringar"),
+                "el":("Δεν υπάρχει ανοιχτό PDF","Έτοιμο","Αποθηκεύτηκε","Μη αποθηκευμένες αλλαγές"),
+                "ar":("لا يوجد PDF مفتوح","جاهز","تم الحفظ","تغييرات غير محفوظة")
+            }.get(self.current_lang,("No PDF open","Ready","Saved","Unsaved changes"))
+            self.status_page.setText(f"{t['page']} {self.current_page+1} {t['of']} {self.doc.page_count}" if self.doc else status_text[0])
             self.status_zoom.setText(f"{round(self.zoom_factor*100)}%")
             dirty=bool(self._document_dirty)
-            self.status_dirty.setText("Unsaved changes" if dirty else ("Saved" if self.doc else "Ready"))
+            self.status_dirty.setText(status_text[3] if dirty else (status_text[2] if self.doc else status_text[1]))
             self.status_dirty.setProperty("dirty","true" if dirty else "false")
             self.status_dirty.style().unpolish(self.status_dirty)
             self.status_dirty.style().polish(self.status_dirty)
