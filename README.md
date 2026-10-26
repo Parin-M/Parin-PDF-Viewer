@@ -11,6 +11,9 @@ This branch contains development work for the next Parin PDF Viewer iteration. I
 - Use a minimalist navy-header workspace with monochrome toolbar glyphs, grouped actions, a refined navigation dock, a page/zoom/save status strip, and a neutral PDF canvas with optional page shadow.
 - Add a persistent Light/Dark appearance mode throughout the application and Settings; the PDF page content keeps its original colours.
 - Preserve the existing PDF features and localized interface while modernizing the surrounding controls.
+- Preview pen and highlighter strokes in real time and save the completed path to the PDF on release.
+- Use the optional offline Smart Ink assistant to smooth small writing jitters while preserving stroke endpoints and stronger direction changes; it does not upload document content or perform handwriting-to-text recognition.
+- Choose Sans serif, Serif or Monospace and a 6–72 pt font size before inserting text annotations.
 - Add a Rust native extension (PyO3) for defensive zoom normalization, with the existing Python fallback retained when the extension is unavailable.
 - A localized About page under Settings, with the exact project credit, application version, GitHub repository, GPL-3.0 license, and a copy-version button.
 - A drag-and-drop page organizer to reorder, rotate, delete, and extract pages, plus insertion from another PDF.
