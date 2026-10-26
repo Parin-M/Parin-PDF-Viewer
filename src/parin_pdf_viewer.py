@@ -1709,7 +1709,7 @@ QDialog{{background:{dialog_bg};}}
     def open_file(self, selected_path=None, restore_session=False):
         file_path = selected_path
         if not file_path:
-            file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF documents (*.pdf)")
+            file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF documents (*.pdf *.PDF);;All files (*)")
         if not file_path:
             return
         candidate = None
@@ -1721,15 +1721,24 @@ QDialog{{background:{dialog_bg};}}
             candidate = fitz.open(file_path)
             password = ""
             if candidate.is_encrypted:
-                pwd, ok = QInputDialog.getText(self, "Unlock PDF", TRANSLATIONS[self.current_lang]["enter_pass"], QLineEdit.Password)
-                if not ok or not pwd:
-                    candidate.close()
-                    return
-                if not candidate.authenticate(pwd):
-                    candidate.close()
-                    QMessageBox.critical(self, "Cannot open PDF", TRANSLATIONS[self.current_lang]["wrong_pass"])
-                    return
-                password = pwd
+                # Some encrypted PDFs intentionally use an empty user password.
+                if not candidate.authenticate(""):
+                    while True:
+                        pwd, ok = QInputDialog.getText(
+                            self, "Unlock PDF",
+                            TRANSLATIONS[self.current_lang]["enter_pass"],
+                            QLineEdit.Password,
+                        )
+                        if not ok:
+                            candidate.close()
+                            return
+                        if candidate.authenticate(pwd):
+                            password = pwd
+                            break
+                        QMessageBox.warning(
+                            self, "Cannot open PDF",
+                            TRANSLATIONS[self.current_lang]["wrong_pass"],
+                        )
             if candidate.page_count < 1:
                 raise ValueError("The PDF contains no readable pages.")
             if not self._confirm_unsaved_changes():
@@ -2231,10 +2240,37 @@ QDialog{{background:{dialog_bg};}}
         self._update_page_indicator()
 
 
+def _startup_pdf_path(argument):
+    """Resolve a PDF path passed by the shell or a desktop file URL."""
+    if not isinstance(argument, str) or not argument or argument.startswith("-"):
+        return None
+    url = QUrl(argument)
+    if url.isLocalFile():
+        path = url.toLocalFile()
+    elif "://" in argument:
+        # Do not mistake remote URLs or other schemes for local file paths.
+        return None
+    else:
+        path = argument
+    path = os.path.abspath(os.path.expanduser(path))
+    if Path(path).suffix.lower() != ".pdf" or not os.path.isfile(path):
+        return None
+    return path
+
+
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
+    # Keep document arguments away from Qt's CLI parser. Desktop launchers
+    # normally pass local documents as file:// URLs through the %U field.
+    startup_pdf = next(
+        (path for path in (_startup_pdf_path(arg) for arg in sys.argv[1:]) if path),
+        None,
+    )
+    app = QApplication([sys.argv[0]])
     viewer = ParinPDFViewer()
     viewer.show()
     if viewer.app_settings.get('animations', True) and not viewer.app_settings.get('reduce_motion', False):
-        effect=QGraphicsOpacityEffect(viewer); viewer.setGraphicsEffect(effect); fade=QPropertyAnimation(effect,b'opacity',viewer); fade.setDuration(320); fade.setStartValue(0.0); fade.setEndValue(1.0); fade.setEasingCurve(QEasingCurve.OutCubic); viewer._startup_fade=fade; fade.start()
+        effect=QGraphicsOpacityEffect(viewer); viewer.setGraphicsEffect(effect); fade=QPropertyAnimation(effect,b'opacity',viewer); fade.setDuration(320); fade.setStartValue(0.0); fade.setEndValue(1.0); fade.setEasingCurve(QEasingCurve.OutCubic); fade.start()
+        viewer._startup_fade=fade
+    if startup_pdf:
+        QTimer.singleShot(0, lambda path=startup_pdf: viewer.open_file(path))
     sys.exit(app.exec())
