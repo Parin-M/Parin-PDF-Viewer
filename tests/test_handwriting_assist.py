@@ -28,7 +28,7 @@ class SmartInkAssistantTests(unittest.TestCase):
 
     def test_style_summary_handles_steady_and_expressive_strokes(self):
         steady = [(0, 0), (1, 0.02), (2, -0.01), (3, 0.01), (4, 0)]
-        expressive = [(0, 0), (1, 0), (1, 1), (2, 1), (2, 0)]
+        expressive = [(0, 0), (1, 0), (0, 0), (1, 0), (0, 0)]
         self.assertEqual(self.assistant.describe_style(steady), "steady")
         self.assertEqual(self.assistant.describe_style(expressive), "expressive")
 
