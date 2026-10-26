@@ -10,6 +10,10 @@ Continues from `feature/v9.0` without changing `main`.
 - Add a persistent Light/Dark appearance choice across the main window, menus, navigation dock, and Settings while preserving PDF page colours and the existing theme accent selection.
 - Improve the navigation dock and page thumbnail spacing, and apply the existing page-shadow preference to the rendered page.
 - Keep all existing PDF workflows and localization intact while applying the new styles.
+- Add a live pen/highlighter preview while the pointer or stylus moves, then commit the stroke to the PDF on release.
+- Add optional offline Smart Ink smoothing that adapts to stroke geometry, preserves endpoints and stronger turns, and reports a simple stroke-shape profile without uploading document content.
+- Add font-family and 6–72 pt size controls for new text annotations; keep the selected Smart Ink preference between launches.
+- Document the limitation explicitly: this lightweight helper stabilizes ink paths but does not claim handwriting-to-text recognition.
 
 ### Python + Rust architecture
 - Add an optional PyO3-based Rust native extension for zoom normalization.
