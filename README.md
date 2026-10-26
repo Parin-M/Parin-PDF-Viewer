@@ -1,12 +1,13 @@
 # Parin PDF Viewer
 
-## Development branch: 9.0.0
+## Development branch: 9.1.0
 
 This branch contains development work for the next Parin PDF Viewer iteration. It is **not a published release** until the automated checks pass and the maintainer reviews the changes.
 
-### What is changing in 9.0
+### What is changing in 9.1
 
-- Everything in the 8.9 development branch, including safer loading/saving, navigation, search, recent files, session restoration, and full-document printing.
+- Everything from `feature/v9.0`, including page organization, undo/redo, safer loading/saving, navigation, search, recent files, session restoration, and full-document printing.
+- Add a Rust native extension (PyO3) for defensive zoom normalization, with the existing Python fallback retained when the extension is unavailable.
 - A localized About page under Settings, with the exact project credit, application version, GitHub repository, GPL-3.0 license, and a copy-version button.
 - A drag-and-drop page organizer to reorder, rotate, delete, and extract pages, plus insertion from another PDF.
 - Ctrl+Z / Ctrl+Y undo and redo for annotations and supported page operations, with bounded history to limit memory use.
@@ -22,7 +23,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests
 ```
 
-GitHub Actions builds the `.deb` file as `parin-pdf_9.0.0_amd64.deb` and uploads it as the `parin-pdf-9.0.0-deb` workflow artifact. To build locally on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
+GitHub Actions builds the `.deb` file as `parin-pdf_9.1.0_amd64.deb` and uploads it as the `parin-pdf-9.1.0-deb` workflow artifact. To build locally on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
 
 ---
 
