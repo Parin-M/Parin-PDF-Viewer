@@ -39,7 +39,7 @@ Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: Parin
-Depends: libc6, libstdc++6, libgcc-s1, libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0, libxcb-cursor0, libxcb-icccm4, libxcb-keysyms1, libxcb-shape0, libxcb-xinerama0, libxcb-randr0, libxcb-render-util0, libxcb-xfixes0, libxcb-xkb1, libdbus-1-3, libfontconfig1, libx11-xcb1
+Depends: libc6, libstdc++6, libgcc-s1, libgl1, libegl1, libpulse0, libxkbcommon0, libxkbcommon-x11-0, libxcb-cursor0, libxcb-icccm4, libxcb-keysyms1, libxcb-shape0, libxcb-xinerama0, libxcb-randr0, libxcb-render-util0, libxcb-xfixes0, libxcb-xkb1, libdbus-1-3, libfontconfig1, libx11-xcb1
 Description: Parin - Modern PDF workspace
  Modern desktop PDF viewer built with PySide6 and PyMuPDF.
 EOF
