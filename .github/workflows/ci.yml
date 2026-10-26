@@ -36,14 +36,15 @@ jobs:
           maturin build --release --manifest-path rust-core/Cargo.toml --out /tmp/parin-rust-wheelhouse
           python -m pip install /tmp/parin-rust-wheelhouse/*.whl
           cargo test --no-default-features --manifest-path rust-core/Cargo.toml
-      - name: Compile source and tests
-        run: python -m compileall -q src tests
-      - name: Run regression tests
-        run: python -m unittest discover -s tests -v
       - name: Install Linux packaging libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y dpkg-dev patchelf libgl1 libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0 libxcb-randr0 libxcb-render-util0 libxcb-xfixes0 libxcb-xkb1 libdbus-1-3 libfontconfig1 libx11-xcb1
+
+      - name: Compile source and tests
+        run: python -m compileall -q src tests
+      - name: Run regression tests
+        run: python -m unittest discover -s tests -v
       - name: Build Debian package
         run: |
           python -m venv .venv
