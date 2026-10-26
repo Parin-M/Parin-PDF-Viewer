@@ -15,6 +15,7 @@ This branch contains development work for the next Parin PDF Viewer iteration. I
 - Use the optional offline Smart Ink assistant to smooth small writing jitters while preserving stroke endpoints and stronger direction changes; it does not upload document content or perform handwriting-to-text recognition.
 - Choose Sans serif, Serif or Monospace and a 6–72 pt font size before inserting text annotations.
 - Open local PDFs directly from the Linux file manager via the registered desktop handler, including `file://` URLs and uppercase `.PDF` extensions; a failed open leaves the current document intact.
+- Keep the PDF canvas at the rendered image's real dimensions so pages are not resized/clipped by the scroll area; add a regression check that validates actual rendered page pixels.
 - Add a Rust native extension (PyO3) for defensive zoom normalization, with the existing Python fallback retained when the extension is unavailable.
 - A localized About page under Settings, with the exact project credit, application version, GitHub repository, GPL-3.0 license, and a copy-version button.
 - A drag-and-drop page organizer to reorder, rotate, delete, and extract pages, plus insertion from another PDF.
