@@ -1067,11 +1067,16 @@ QDialog{{background:{dialog_bg};}}
         self._build_welcome_page()
         self.scroll_area=QScrollArea(self)
         self.scroll_area.setObjectName("document_scroll")
-        self.scroll_area.setWidgetResizable(True)
+        # The PDF canvas must keep its rendered pixel size. With widgetResizable
+        # enabled, QScrollArea can resize the QLabel independently of its pixmap;
+        # that can clip the page and offsets the live-ink overlay coordinates.
+        self.scroll_area.setWidgetResizable(False)
         self.scroll_area.setFrameShape(QFrame.NoFrame)
         self.scroll_area.setAlignment(Qt.AlignCenter)
         self.page_label=PDFPageLabel(self)
         self.page_label.setObjectName("pdf_page")
+        self.page_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.page_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.scroll_area.setWidget(self.page_label)
         self.workspace_stack.addWidget(self.welcome_page)
         self.workspace_stack.addWidget(self.scroll_area)
@@ -1810,8 +1815,15 @@ QDialog{{background:{dialog_bg};}}
             mat = fitz.Matrix(self.zoom_factor, self.zoom_factor).prerotate(self.rotation)
             pix = page.get_pixmap(matrix=mat, alpha=False)
             img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
-            self.page_label.setPixmap(QPixmap.fromImage(img))
-            self.page_label.adjustSize()
+            rendered_pixmap = QPixmap.fromImage(img)
+            if rendered_pixmap.isNull() or rendered_pixmap.width() < 1 or rendered_pixmap.height() < 1:
+                raise RuntimeError("The PDF page renderer returned an empty image.")
+            self.page_label.setPixmap(rendered_pixmap)
+            # Keep widget geometry in sync with the exact rendered image. The
+            # scroll area then scrolls the entire page instead of resizing/clipping
+            # the QLabel, and annotation coordinates remain image-relative.
+            self.page_label.resize(rendered_pixmap.size())
+            self.page_label.updateGeometry()
             if not self._navigation_needs_refresh and hasattr(self, "page_list") and 0 <= self.current_page < self.page_list.count() and self.page_list.currentRow() != self.current_page:
                 self.page_list.blockSignals(True)
                 self.page_list.setCurrentRow(self.current_page)
