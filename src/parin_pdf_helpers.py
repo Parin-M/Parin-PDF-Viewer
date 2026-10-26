@@ -6,7 +6,7 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
-APP_VERSION = "9.1.0"
+APP_VERSION = "9.1.1"
 RECENT_FILES_LIMIT = 10
 
 # Prefer the native Rust implementation when installed; source checkouts retain a Python fallback.

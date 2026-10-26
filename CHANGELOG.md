@@ -1,5 +1,13 @@
 # Changelog
 
+## 9.1.1 — PDF rendering fix
+
+- Keep the PDF canvas at the exact dimensions of the rendered pixmap instead of allowing the scroll area to resize the page label independently.
+- Re-render the active page after the stacked workspace completes layout, preventing fit-to-width calculations from using a hidden or zero-sized viewport during startup.
+- Add a GUI regression test that asserts a rendered page bitmap exists, is sized to the canvas, and contains expected non-white page pixels.
+- Carry forward the fixes for desktop file URLs, uppercase `.PDF` extensions, and safer recovery after failed opens.
+- Bump application, native-core, Debian package, and CI artifact versions to 9.1.1.
+
 ## 9.1.0 — Development branch
 
 Continues from `feature/v9.0` without changing `main`.

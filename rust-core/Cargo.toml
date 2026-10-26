@@ -1,6 +1,6 @@
 [package]
 name = "parin-rust-core"
-version = "9.1.0"
+version = "9.1.1"
 edition = "2021"
 publish = false
 

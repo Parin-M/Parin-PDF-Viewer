@@ -1,6 +1,6 @@
 # Parin PDF Viewer
 
-## Development branch: 9.1.0
+## Development branch: 9.1.1
 
 This branch contains development work for the next Parin PDF Viewer iteration. It is **not a published release** until the automated checks pass and the maintainer reviews the changes.
 
@@ -32,7 +32,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests
 ```
 
-GitHub Actions builds the `.deb` file as `parin-pdf_9.1.0_amd64.deb` and uploads it as the `parin-pdf-9.1.0-deb` workflow artifact. To build locally on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
+GitHub Actions builds the `.deb` file as `parin-pdf_9.1.1_amd64.deb` and uploads it as the `parin-pdf-9.1.1-deb` workflow artifact. To build locally on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
 
 ---
 
