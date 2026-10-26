@@ -789,6 +789,7 @@ class ParinPDFViewer(QMainWindow):
         self.is_lofi_playing = False
 
         self.setMinimumSize(1150, 750)
+        self.setAcceptDrops(True)
         self.init_ui()
         self.apply_language(self.current_lang)
         self.apply_app_settings()
@@ -873,6 +874,13 @@ QDockWidget::title{{background:{tool_bg};padding:9px 12px;border-bottom:1px soli
 QDialog{{background:{dialog_bg};}}
 '''
         self.setStyleSheet(base+common)        self.setStyleSheet(base+common)
+        if hasattr(self,'page_label'):
+            if self.app_settings.get('page_shadow',True):
+                shadow=QGraphicsDropShadowEffect(self.page_label); shadow.setBlurRadius(26); shadow.setOffset(0,4); shadow.setColor(QColor(0,0,0,100 if dark else 52)); self.page_label.setGraphicsEffect(shadow)
+            else:
+                self.page_label.setGraphicsEffect(None)
+        self._refresh_welcome_page()
+        self._update_page_indicator()
         self.statusBar().setVisible(bool(self.app_settings.get('status_bar',True)))
         self.audio_output.setVolume(max(0,min(100,int(self.app_settings.get('volume',50))))/100)
         compact=bool(self.app_settings.get('compact_toolbar',False)); large=bool(self.app_settings.get('large_toolbar',True))
@@ -996,18 +1004,168 @@ QDialog{{background:{dialog_bg};}}
         self.setWindowIcon(make_app_icon(64))
         self._build_navigation_dock()
 
+    def _build_welcome_page(self):
+        page_layout=QVBoxLayout(self.welcome_page)
+        page_layout.setContentsMargins(30,26,30,24)
+        page_layout.setSpacing(18)
+        hero=QFrame(self.welcome_page)
+        hero.setObjectName("welcome_hero")
+        hero_layout=QHBoxLayout(hero)
+        hero_layout.setContentsMargins(24,22,24,22)
+        hero_layout.setSpacing(18)
+        copy=QVBoxLayout()
+        copy.setSpacing(8)
+        self.welcome_title=QLabel()
+        self.welcome_title.setObjectName("welcome_title")
+        self.welcome_subtitle=QLabel()
+        self.welcome_subtitle.setObjectName("welcome_subtitle")
+        self.welcome_subtitle.setWordWrap(True)
+        self.welcome_hint=QLabel()
+        self.welcome_hint.setObjectName("welcome_hint")
+        copy.addWidget(self.welcome_title)
+        copy.addWidget(self.welcome_subtitle)
+        copy.addWidget(self.welcome_hint)
+        hero_layout.addLayout(copy,1)
+        self.welcome_open_button=QPushButton()
+        self.welcome_open_button.setObjectName("welcome_open_button")
+        self.welcome_open_button.setMinimumSize(158,48)
+        self.welcome_open_button.setCursor(Qt.PointingHandCursor)
+        self.welcome_open_button.setIcon(make_action_icon("▱",24,THEME_ACCENTS.get(self.app_settings.get("theme","Arctic Glass"),(58,141,255))))
+        self.welcome_open_button.setIconSize(QSize(22,22))
+        self.welcome_open_button.clicked.connect(self.open_file)
+        hero_layout.addWidget(self.welcome_open_button,0,Qt.AlignVCenter)
+        page_layout.addWidget(hero)
+
+        recent_header=QHBoxLayout()
+        self.welcome_recent_title=QLabel()
+        self.welcome_recent_title.setObjectName("welcome_section_title")
+        recent_header.addWidget(self.welcome_recent_title)
+        recent_header.addStretch()
+        self.welcome_clear_button=QPushButton()
+        self.welcome_clear_button.setObjectName("welcome_clear_button")
+        self.welcome_clear_button.setCursor(Qt.PointingHandCursor)
+        self.welcome_clear_button.clicked.connect(self.clear_recent_files)
+        recent_header.addWidget(self.welcome_clear_button)
+        page_layout.addLayout(recent_header)
+
+        self.recent_grid_host=QWidget(self.welcome_page)
+        self.recent_grid=QGridLayout(self.recent_grid_host)
+        self.recent_grid.setContentsMargins(0,0,0,0)
+        self.recent_grid.setHorizontalSpacing(14)
+        self.recent_grid.setVerticalSpacing(14)
+        for col in range(4):
+            self.recent_grid.setColumnStretch(col,1)
+        page_layout.addWidget(self.recent_grid_host)
+        self.welcome_empty=QLabel()
+        self.welcome_empty.setObjectName("welcome_empty")
+        self.welcome_empty.setAlignment(Qt.AlignCenter)
+        self.welcome_empty.setMinimumHeight(90)
+        page_layout.addWidget(self.welcome_empty)
+        page_layout.addStretch(1)
+        self._retranslate_welcome()
+        self._refresh_welcome_page()
+
+    def _welcome_copy(self):
+        values={
+            "en":("Your PDF workspace","Open a document to start reading, or continue with a recent file.","Tip: You can drop a PDF onto this window.","Open PDF","Recent documents","Clear recent","Your recent PDFs will appear here."),
+            "fa":("فضای کاری PDF شما","برای شروع مطالعه یک سند باز کنید یا یکی از فایل‌های اخیر را ادامه دهید.","نکته: می‌توانید فایل PDF را روی پنجره رها کنید.","باز کردن PDF","اسناد اخیر","پاک‌کردن فهرست","فایل‌های اخیر شما اینجا نمایش داده می‌شوند."),
+            "de":("Ihr PDF-Arbeitsbereich","Öffnen Sie ein Dokument oder setzen Sie eine zuletzt verwendete Datei fort.","Tipp: Ziehen Sie eine PDF-Datei auf dieses Fenster.","PDF öffnen","Zuletzt verwendete Dokumente","Verlauf leeren","Zuletzt verwendete PDFs erscheinen hier."),
+            "es":("Tu espacio PDF","Abre un documento o continúa con un archivo reciente.","Consejo: puedes soltar un PDF sobre esta ventana.","Abrir PDF","Documentos recientes","Borrar recientes","Tus PDF recientes aparecerán aquí."),
+            "fr":("Votre espace PDF","Ouvrez un document ou reprenez un fichier récent.","Astuce : déposez un PDF sur cette fenêtre.","Ouvrir un PDF","Documents récents","Effacer les récents","Vos PDF récents apparaîtront ici."),
+            "da":("Dit PDF-arbejdsområde","Åbn et dokument, eller fortsæt med en nylig fil.","Tip: Træk en PDF-fil ind i vinduet.","Åbn PDF","Seneste dokumenter","Ryd seneste","Dine seneste PDF-filer vises her."),
+            "no":("Ditt PDF-område","Åpne et dokument eller fortsett med en nylig fil.","Tips: Slipp en PDF-fil på dette vinduet.","Åpne PDF","Nylige dokumenter","Tøm nylige","Nylige PDF-filer vises her."),
+            "fi":("PDF-työtilasi","Avaa asiakirja tai jatka viimeksi käytetystä tiedostosta.","Vinkki: Pudota PDF tähän ikkunaan.","Avaa PDF","Viimeisimmät asiakirjat","Tyhjennä viimeisimmät","Viimeisimmät PDF-tiedostot näkyvät tässä."),
+            "sv":("Din PDF-arbetsyta","Öppna ett dokument eller fortsätt med en nylig fil.","Tips: Släpp en PDF-fil på det här fönstret.","Öppna PDF","Senaste dokument","Rensa senaste","Dina senaste PDF-filer visas här."),
+            "el":("Ο χώρος PDF σας","Ανοίξτε ένα έγγραφο ή συνεχίστε από ένα πρόσφατο αρχείο.","Συμβουλή: σύρετε ένα PDF σε αυτό το παράθυρο.","Άνοιγμα PDF","Πρόσφατα έγγραφα","Εκκαθάριση","Τα πρόσφατα PDF θα εμφανίζονται εδώ."),
+            "ar":("مساحة عمل PDF","افتح مستندًا أو تابع من ملف حديث.","تلميح: اسحب ملف PDF إلى هذه النافذة.","فتح PDF","المستندات الأخيرة","مسح الأخيرة","ستظهر ملفات PDF الأخيرة هنا.")
+        }
+        return values.get(self.current_lang,values["en"])
+
+    def _retranslate_welcome(self):
+        if not hasattr(self,"welcome_title"):
+            return
+        title,subtitle,hint,open_text,recent_text,clear_text,empty_text=self._welcome_copy()
+        self.welcome_title.setText(title)
+        self.welcome_subtitle.setText(subtitle)
+        self.welcome_hint.setText(hint)
+        self.welcome_open_button.setText(open_text)
+        self.welcome_recent_title.setText(recent_text)
+        self.welcome_clear_button.setText(clear_text)
+        self.welcome_empty.setText(empty_text)
+
+    def _recent_pdf_icon(self,path):
+        dark=str(self.app_settings.get("appearance_mode","light")).lower()=="dark"
+        pm=QPixmap(112,132)
+        pm.fill(QColor("#172235" if dark else "#F0F4F9"))
+        accent=QColor(*THEME_ACCENTS.get(self.app_settings.get("theme","Arctic Glass"),(58,141,255)))
+        try:
+            document=fitz.open(path)
+            try:
+                if document.is_encrypted:
+                    raise ValueError("Preview unavailable for a password-protected PDF.")
+                page=document.load_page(0)
+                width=max(1.0,page.rect.width); height=max(1.0,page.rect.height)
+                scale=min(100/width,116/height,0.45)
+                pix=page.get_pixmap(matrix=fitz.Matrix(scale,scale),alpha=False)
+                image=QImage(pix.samples,pix.width,pix.height,pix.stride,QImage.Format_RGB888).copy()
+                document.close()
+                return QIcon(QPixmap.fromImage(image))
+            finally:
+                if not document.is_closed:
+                    document.close()
+        except Exception:
+            painter=QPainter(pm)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setPen(QColor("#41546E" if dark else "#D1DCE9"))
+            painter.setBrush(QColor("#21324A" if dark else "#FFFFFF"))
+            painter.drawRoundedRect(10,5,92,122,7,7)
+            painter.setPen(accent)
+            painter.setFont(QFont("DejaVu Sans",15,QFont.Bold))
+            painter.drawText(pm.rect(),Qt.AlignCenter,"PDF")
+            painter.end()
+            return QIcon(pm)
+
+    def _refresh_welcome_page(self):
+        if not hasattr(self,"recent_grid"):
+            return
+        while self.recent_grid.count():
+            item=self.recent_grid.takeAt(0)
+            widget=item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        existing=[path for path in self.recent_files if os.path.isfile(path)][:8]
+        self.welcome_empty.setVisible(not existing)
+        self.welcome_clear_button.setVisible(bool(existing))
+        for index,path in enumerate(existing):
+            card=QToolButton(self.recent_grid_host)
+            card.setObjectName("recent_file_card")
+            card.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            card.setToolTip(path)
+            card.setText(Path(path).name)
+            card.setIcon(self._recent_pdf_icon(path))
+            card.setIconSize(QSize(104,116))
+            card.setMinimumSize(180,178)
+            card.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Fixed)
+            card.setCursor(Qt.PointingHandCursor)
+            card.clicked.connect(lambda checked=False,selected=path:self.open_file(selected))
+            self.recent_grid.addWidget(card,index//4,index%4)
+
     def _build_navigation_dock(self):
         self._navigation_needs_refresh = True
         self.navigation_dock = QDockWidget(self._nav_text("dock"), self)
         self.navigation_dock.setObjectName("navigation_dock")
         self.navigation_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.navigation_dock.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetMovable)
+        self.navigation_dock.setMinimumWidth(230)
         self.navigation_tabs = QTabWidget(self.navigation_dock)
         self.outline_tree = QTreeWidget(self.navigation_tabs)
         self.outline_tree.setHeaderHidden(True)
         self.outline_tree.itemActivated.connect(self._navigate_outline_item)
         self.page_list = QListWidget(self.navigation_tabs)
-        self.page_list.setIconSize(QSize(72, 96))
+        self.page_list.setIconSize(QSize(76, 100))
         self.page_list.setUniformItemSizes(True)
+        self.page_list.setSpacing(6)
+        self.page_list.setAlternatingRowColors(True)
         self.page_list.currentRowChanged.connect(self._navigate_page_list)
         self.page_list.verticalScrollBar().valueChanged.connect(self._schedule_thumbnail_refresh)
         self.navigation_tabs.addTab(self.outline_tree, self._nav_text("outline"))
@@ -1172,11 +1330,13 @@ QDialog{{background:{dialog_bg};}}
         self.recent_files = add_recent_file(self.recent_files, file_path)
         self.settings_store.setValue("recent_files", self.recent_files)
         self._refresh_recent_menu()
+        self._refresh_welcome_page()
 
     def clear_recent_files(self):
         self.recent_files = []
         self.settings_store.setValue("recent_files", [])
         self._refresh_recent_menu()
+        self._refresh_welcome_page()
 
     def mark_document_modified(self):
         self._document_dirty = True
@@ -1491,6 +1651,8 @@ QDialog{{background:{dialog_bg};}}
             self._last_search_rect_index = -1
             self.search_highlight = None
             self._refresh_navigation()
+            if hasattr(self,'workspace_stack'):
+                self.workspace_stack.setCurrentWidget(self.scroll_area)
             self._apply_fit() if self.fit_mode in ('width', 'page') else self.render_page()
             self._add_recent_file(file_path)
             self._persist_reading_position()
@@ -1643,7 +1805,7 @@ QDialog{{background:{dialog_bg};}}
 
     def _retranslate_shell(self):
         extra={'en':('Fast • Focused • PDF workspace','FILE','ANNOTATE','VIEW','PAGE','TOOLS','More More','Settings Settings','Ready • Open a PDF to begin','Search Search inside PDF…'),'fa':('سریع • متمرکز • محیط حرفه‌ای PDF','فایل','حاشیه‌نویسی','نمایش','صفحه','ابزارها','More بیشتر','Settings تنظیمات','آماده • یک PDF باز کنید','Search جستجو در PDF…'),'de':('Schnell • Fokus • PDF-Arbeitsbereich','DATEI','ANMERKEN','ANSICHT','SEITE','WERKZEUGE','More Mehr','Settings Einstellungen','Bereit • PDF öffnen','Search Im PDF suchen…'),'es':('Rápido • Enfocado • Espacio PDF','ARCHIVO','ANOTAR','VISTA','PÁGINA','HERRAMIENTAS','More Más','Settings Ajustes','Listo • Abra un PDF','Search Buscar en PDF…'),'fr':('Rapide • Concentré • Espace PDF','FICHIER','ANNOTER','AFFICHAGE','PAGE','OUTILS','More Plus','Settings Paramètres','Prêt • Ouvrez un PDF','Search Rechercher dans le PDF…'),'da':('Hurtig • Fokuseret • PDF-arbejdsområde','FIL','ANNOTERING','VISNING','SIDE','VÆRKTØJER','More Mere','Settings Indstillinger','Klar • Åbn en PDF','Search Søg i PDF…'),'no':('Rask • Fokusert • PDF-område','FIL','MERKNADER','VISNING','SIDE','VERKTØY','More Mer','Settings Innstillinger','Klar • Åpne en PDF','Search Søk i PDF…'),'fi':('Nopea • Keskittynyt • PDF-työtila','TIEDOSTO','MERKINNÄT','NÄKYMÄ','SIVU','TYÖKALUT','More Lisää','Settings Asetukset','Valmis • Avaa PDF','Search Hae PDF:stä…'),'sv':('Snabb • Fokuserad • PDF-arbetsyta','FIL','ANTECKNINGAR','VY','SIDA','VERKTYG','More Mer','Settings Inställningar','Redo • Öppna en PDF','Search Sök i PDF…'),'el':('Γρήγορο • Εστιασμένο • PDF','ΑΡΧΕΙΟ','ΣΧΟΛΙΑΣΜΟΣ','ΠΡΟΒΟΛΗ','ΣΕΛΙΔΑ','ΕΡΓΑΛΕΙΑ','More Περισσότερα','Settings Ρυθμίσεις','Έτοιμο • Ανοίξτε PDF','Search Αναζήτηση στο PDF…'),'ar':('سريع • مركز • مساحة عمل PDF','ملف','تعليقات','عرض','صفحة','أدوات','More المزيد','Settings الإعدادات','جاهز • افتح ملف PDF','Search البحث داخل PDF…')}
-        vals=extra.get(self.current_lang,extra['en']); self.brand_subtitle.setText(vals[0]); self.btn_settings.setText(vals[7]); self.btn_more.setText(vals[6]); self.quick_search.setPlaceholderText(vals[9]); self.statusBar().showMessage(vals[8])
+        vals=extra.get(self.current_lang,extra['en']); self.brand_subtitle.setText(vals[0]); self.btn_settings.setText(vals[7]); self.btn_more.setText(vals[6]); self.quick_search.setPlaceholderText(vals[9]); self.btn_navigation.setText(self._nav_text('pages')); self.btn_navigation.setToolTip(self._nav_text('nav_action')); self._retranslate_welcome(); self.statusBar().showMessage(f'Opened {Path(self.file_path).name}' if self.doc and self.file_path else vals[8])
         for k,label in zip(['FILE','ANNOTATE','VIEW','PAGE','TOOLS'],vals[1:6]):
             if k in self.group_labels: self.group_labels[k].setText(label)
         more_names=[TRANSLATIONS[self.current_lang]['search']+' PDF',TRANSLATIONS[self.current_lang]['pass_remove'],TRANSLATIONS[self.current_lang]['pass_add'],vals[7]]
