@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QLineEdit, QScrollArea, 
     QInputDialog, QMessageBox, QMenu, QColorDialog, QSpinBox, QDialog, QCheckBox,
     QComboBox, QSlider, QTabWidget, QFormLayout, QGroupBox, QDialogButtonBox,
-    QRadioButton, QButtonGroup, QAbstractItemView, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QDockWidget, QStackedWidget, QFrame, QToolButton, QSizePolicy, QStyle, QGraphicsOpacityEffect
+    QRadioButton, QButtonGroup, QAbstractItemView, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QDockWidget, QStackedWidget, QFrame, QToolButton, QSizePolicy, QStyle, QGraphicsOpacityEffect, QGraphicsDropShadowEffect, QGridLayout
 )
 from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -114,12 +114,61 @@ COLOR_THEMES = {name: _build_light_theme(accent, soft, surface) for name, _, acc
 THEME_ACCENTS = {name: tuple(int(accent[i:i+2],16) for i in (1,3,5)) for name,_,accent,_,_ in THEME_DEFINITIONS}
 
 
-ICON_GLYPHS={'Open':'▱','Save':'↓','Print':'▤','Pen':'✎','Highlight':'✦','Eraser':'⌫','Text':'T','Color':'●','Fit':'□','Prev':'‹','Next':'›','Rotate':'⟳','Fullscreen':'⛶','Lo-Fi':'♫','Settings':'⚙','Language':'文','More':'⋯'}
-def make_action_icon(symbol,size=20,accent=(80,180,255)):
-    pm=QPixmap(size,size); pm.fill(Qt.transparent); painter=QPainter(pm); painter.setRenderHint(QPainter.Antialiasing)
-    base=QColor(*accent); grad=QLinearGradient(0,0,size,size); grad.setColorAt(0,base); grad.setColorAt(1,base.lighter(118)); painter.setBrush(grad); painter.setPen(Qt.NoPen); painter.drawEllipse(1,1,size-2,size-2)
-    painter.setPen(QColor(255,255,255,235)); painter.setFont(QFont('DejaVu Sans',max(8,int(size*.52)),QFont.Bold)); painter.drawText(pm.rect(),Qt.AlignCenter,symbol); painter.end(); return QIcon(pm)
+def _build_dark_theme(accent):
+    """Dark counterpart to light themes; PDF page pixels remain unchanged."""
+    return f'''QMainWindow,QWidget{{background:#111827;color:#E5EDF7;font-family:"Inter","Noto Sans",sans-serif;font-size:10pt;}}
+QMainWindow{{background:#101725;}}
+QScrollArea{{background:transparent;border:none;}}
+QLabel{{color:#E5EDF7;background:transparent;}}
+QPushButton{{background:#1A2638;color:#E5EDF7;border:1px solid #30425A;border-radius:10px;padding:8px 13px;font-weight:600;}}
+QPushButton:hover{{background:#243851;border-color:{accent};}}
+QPushButton:pressed{{background:#20334B;border:1px solid {accent};padding-top:9px;padding-bottom:7px;}}
+QPushButton:checked{{background:#203A59;border:2px solid {accent};color:#FFFFFF;}}
+QPushButton:disabled{{background:#182131;color:#65758C;border-color:#27364B;}}
+QToolButton{{background:transparent;color:#DCE6F3;border:1px solid transparent;border-radius:9px;padding:7px;}}
+QToolButton:hover{{background:#243851;border-color:#38506E;}}
+QToolButton:checked{{background:#203A59;border:1px solid {accent};}}
+QSpinBox,QLineEdit,QComboBox{{background:#111B2A;color:#E5EDF7;border:1px solid #30425A;border-radius:10px;padding:8px 10px;selection-background-color:{accent};selection-color:#FFFFFF;min-height:20px;}}
+QLineEdit:focus,QComboBox:focus,QSpinBox:focus{{border:2px solid {accent};background:#141F30;}}
+QComboBox::drop-down{{border:none;width:24px;}}
+QMenu{{background:#172235;color:#E5EDF7;border:1px solid #30425A;border-radius:12px;padding:6px;}}
+QMenu::item{{padding:9px 16px;border-radius:7px;}}
+QMenu::item:selected{{background:#253D5B;color:#FFFFFF;}}
+QCheckBox{{color:#DCE6F3;spacing:9px;padding:6px;}}
+QCheckBox::indicator{{width:17px;height:17px;border-radius:5px;border:1px solid #5A6D86;background:#111B2A;}}
+QCheckBox::indicator:checked{{background:{accent};border-color:{accent};}}
+QGroupBox{{border:1px solid #30425A;border-radius:13px;margin-top:14px;padding:14px 10px 10px;background:#172235;font-weight:600;}}
+QGroupBox::title{{subcontrol-origin:margin;left:14px;padding:0 6px;color:#B2C2D7;font-weight:700;}}
+QTabWidget::pane{{border:1px solid #30425A;border-radius:12px;background:#172235;top:-1px;}}
+QTabBar::tab{{background:#172235;color:#AABAD0;border:1px solid #30425A;padding:9px 15px;margin-right:4px;border-top-left-radius:8px;border-top-right-radius:8px;}}
+QTabBar::tab:selected{{background:#203650;color:#FFFFFF;border-bottom:2px solid {accent};font-weight:700;}}
+QSlider::groove:horizontal{{height:6px;background:#2A3A51;border-radius:3px;}}
+QSlider::handle:horizontal{{width:18px;height:18px;margin:-6px 0;border-radius:9px;background:{accent};border:3px solid #172235;}}
+QScrollBar:vertical{{width:10px;background:transparent;margin:4px;}}
+QScrollBar::handle:vertical{{background:#3B4D65;border-radius:5px;min-height:30px;}}
+QScrollBar::handle:vertical:hover{{background:#536A86;}}
+QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0;}}
+QToolTip{{background:#243851;color:#FFFFFF;border:1px solid #405976;border-radius:6px;padding:5px 8px;}}'''
 
+
+def _theme_stylesheet(theme, appearance_mode="light"):
+    theme = theme if theme in COLOR_THEMES else "Arctic Glass"
+    if str(appearance_mode).lower() == "dark":
+        accent = "#%02X%02X%02X" % THEME_ACCENTS.get(theme, (58,141,255))
+        return _build_dark_theme(accent)
+    return COLOR_THEMES[theme]
+
+
+ICON_GLYPHS={'Open':'▱','Save':'↓','Print':'▤','Pen':'✎','Highlight':'✦','Eraser':'⌫','Text':'T','Color':'●','Fit':'□','Prev':'‹','Next':'›','Rotate':'⟳','Fullscreen':'⛶','Lo-Fi':'♫','Settings':'⚙','Language':'文','More':'⋯'}
+def make_action_icon(symbol,size=20,accent=(53,111,216)):
+    """Render compact, consistent accent-coloured glyphs for toolbar actions."""
+    pm=QPixmap(size,size); pm.fill(Qt.transparent)
+    painter=QPainter(pm); painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(QColor(*accent))
+    painter.setFont(QFont("DejaVu Sans",max(10,int(size*.62)),QFont.Medium))
+    painter.drawText(pm.rect(),Qt.AlignCenter,symbol)
+    painter.end()
+    return QIcon(pm)
 
 class PDFPageLabel(QLabel):
     def __init__(self, viewer_instance):
@@ -321,6 +370,15 @@ def soft_tone(hex_color):
     h=hex_color.lstrip('#'); r,g,b=[int(h[i:i+2],16) for i in (0,2,4)]
     return '#%02X%02X%02X'%((r+255*3)//4,(g+255*3)//4,(b+255*3)//4)
 
+
+# Appearance mode labels for the existing localized Settings screen.
+for _code, _label in {
+    "en":"Appearance mode","fa":"حالت ظاهری","de":"Darstellungsmodus",
+    "es":"Modo de apariencia","fr":"Mode d’apparence","da":"Udseende",
+    "no":"Utseende","fi":"Ulkoasu","sv":"Utseende","el":"Εμφάνιση","ar":"وضع المظهر"
+}.items():
+    SETTINGS_I18N.get(_code, SETTINGS_I18N["en"])["appearance_mode"] = _label
+
 class SettingsDialog(QDialog):
     settings_changed=Signal(dict)
     def __init__(self,viewer):
@@ -367,7 +425,40 @@ class SettingsDialog(QDialog):
     def _build_overview(self):
         w,l=self._page(); f=self._card(l,'General'); self.language_label=QLabel(); f.addWidget(self.language_label); self.remember_last=self._check(f,'','remember_last'); self.restore_zoom=self._check(f,'','restore_zoom'); self.single_page=self._check(f,'','single_page'); self.confirm_close=self._check(f,'','confirm_close'); f=self._card(l,'Workspace'); self.status=self._check(f,'','status_bar'); self.center_page=self._check(f,'','center_page'); self.page_shadow=self._check(f,'','page_shadow'); l.addStretch(); self.stack.addWidget(w)
     def _build_appearance(self):
-        w,l=self._page(); f=self._card(l,'Theme Studio','Bright Material You themes and interface controls.'); self.theme_label=QLabel(); f.addWidget(self.theme_label); self.theme=QComboBox(); self.theme.addItems(list(COLOR_THEMES)); self.theme.setCurrentText(self.settings.get('theme','Arctic Glass')); f.addWidget(self.theme); self.theme_preview=QLabel(); self.theme_preview.setMinimumHeight(54); self.theme_preview.setAlignment(Qt.AlignCenter); f.addWidget(self.theme_preview); self.accent_label=QLabel(); f.addWidget(self.accent_label); self.accent=QComboBox(); self.accent.addItems(['Theme default','Azure','Violet','Turquoise','Rose','Emerald']); self.accent.setCurrentText(self.settings.get('accent','Theme default')); f.addWidget(self.accent); self.aero=self._check(f,'','aero_enabled'); self.large=self._check(f,'','large_toolbar'); self.show_icons=self._check(f,'','show_toolbar_text'); self.compact=self._check(f,'','compact_toolbar',False); self.animations=self._check(f,'','animations'); self.theme.currentTextChanged.connect(self._preview_style); l.addStretch(); self.stack.addWidget(w)
+        w,l=self._page()
+        f=self._card(l,"Theme Studio","A clean theme with light and dark appearance modes.")
+        self.appearance_label=QLabel()
+        f.addWidget(self.appearance_label)
+        self.appearance_mode=QComboBox()
+        self.appearance_mode.addItem("Light","light")
+        self.appearance_mode.addItem("Dark","dark")
+        self.appearance_mode.setCurrentIndex(1 if str(self.settings.get("appearance_mode","light")).lower()=="dark" else 0)
+        f.addWidget(self.appearance_mode)
+        self.theme_label=QLabel()
+        f.addWidget(self.theme_label)
+        self.theme=QComboBox()
+        self.theme.addItems(list(COLOR_THEMES))
+        self.theme.setCurrentText(self.settings.get("theme","Arctic Glass"))
+        f.addWidget(self.theme)
+        self.theme_preview=QLabel()
+        self.theme_preview.setMinimumHeight(54)
+        self.theme_preview.setAlignment(Qt.AlignCenter)
+        f.addWidget(self.theme_preview)
+        self.accent_label=QLabel()
+        f.addWidget(self.accent_label)
+        self.accent=QComboBox()
+        self.accent.addItems(["Theme default","Azure","Violet","Turquoise","Rose","Emerald"])
+        self.accent.setCurrentText(self.settings.get("accent","Theme default"))
+        f.addWidget(self.accent)
+        self.aero=self._check(f,"","aero_enabled")
+        self.large=self._check(f,"","large_toolbar")
+        self.show_icons=self._check(f,"","show_toolbar_text")
+        self.compact=self._check(f,"","compact_toolbar",False)
+        self.animations=self._check(f,"","animations")
+        self.theme.currentTextChanged.connect(self._preview_style)
+        self.appearance_mode.currentIndexChanged.connect(self._preview_style)
+        l.addStretch()
+        self.stack.addWidget(w)
     def _build_eye(self):
         w,l=self._page(); f=self._card(l,'Eye Comfort','Optional controls for visual comfort.'); self.blue=self._check(f,'','blue_filter',False); self.blue_label_title=QLabel(); f.addWidget(self.blue_label_title); row=QHBoxLayout(); self.blue_strength=QSlider(Qt.Horizontal); self.blue_strength.setRange(0,100); self.blue_strength.setValue(int(self.settings.get('blue_filter_strength',35))); self.blue_value=QLabel('35%'); row.addWidget(self.blue_strength,1); row.addWidget(self.blue_value); f.addLayout(row); self.warm=self._check(f,'','night_reading',False); self.reduce_motion=self._check(f,'','reduce_motion',False); self.contrast_label_title=QLabel(); f.addWidget(self.contrast_label_title); row=QHBoxLayout(); self.contrast=QSlider(Qt.Horizontal); self.contrast.setRange(80,120); self.contrast.setValue(int(self.settings.get('ui_contrast',100))); self.contrast_value=QLabel('100%'); row.addWidget(self.contrast,1); row.addWidget(self.contrast_value); f.addLayout(row); self.blue_strength.valueChanged.connect(lambda v:self.blue_value.setText(f'{v}%')); self.contrast.valueChanged.connect(lambda v:self.contrast_value.setText(f'{v}%')); l.addStretch(); self.stack.addWidget(w)
     def _build_document(self):
@@ -418,38 +509,54 @@ class SettingsDialog(QDialog):
         _ct=_cards.get(self.lang,_cards['en'])
         for _lab,_txt in zip(self.card_titles,_ct):
             if _lab is not None: _lab.setText(_txt); _lab.setVisible(True)
-        self.language_label.setText(self.t.get('language','Interface language')); self._set_texts(); self.about_version.setText(f"{self.t.get('version','Version')} {APP_VERSION}"); self.about_credit.setText(ABOUT_ATTRIBUTION); self.about_repo.setText(f"<a href='https://github.com/Parin-M/Parin-PDF-Viewer'>{self.t.get('repository','GitHub repository')}</a>"); self.about_license.setText(f"{self.t.get('license','License')}: GPL-3.0"); self.about_copy_version.setText(self.t.get('copy_version','Copy version')); self.reset_btn.setText(self.t['reset']); self.buttons.button(QDialogButtonBox.Cancel).setText(self.t['cancel']); self.buttons.button(QDialogButtonBox.Apply).setText(self.t['apply']); self.buttons.button(QDialogButtonBox.Ok).setText(self.t['ok']); codes=['en','fa','da','de','es','no','fi','sv','fr','el','ar']; self.lang_combo.blockSignals(True); self.lang_combo.setCurrentIndex(codes.index(self.lang)); self.lang_combo.blockSignals(False); self.nav.setCurrentRow(min(self.nav.currentRow(),7)); self._apply_dialog_style()
+        self.language_label.setText(self.t.get('language','Interface language')); self._set_texts();
+        _appearance_options={'en':('Light','Dark'),'fa':('روشن','تیره'),'de':('Hell','Dunkel'),'es':('Claro','Oscuro'),'fr':('Clair','Sombre'),'da':('Lys','Mørk'),'no':('Lys','Mørk'),'fi':('Vaalea','Tumma'),'sv':('Ljust','Mörkt'),'el':('Φωτεινό','Σκούρο'),'ar':('فاتح','داكن')}.get(self.lang,('Light','Dark'))
+        self.appearance_mode.setItemText(0,_appearance_options[0]); self.appearance_mode.setItemText(1,_appearance_options[1]); self.about_version.setText(f"{self.t.get('version','Version')} {APP_VERSION}"); self.about_credit.setText(ABOUT_ATTRIBUTION); self.about_repo.setText(f"<a href='https://github.com/Parin-M/Parin-PDF-Viewer'>{self.t.get('repository','GitHub repository')}</a>"); self.about_license.setText(f"{self.t.get('license','License')}: GPL-3.0"); self.about_copy_version.setText(self.t.get('copy_version','Copy version')); self.reset_btn.setText(self.t['reset']); self.buttons.button(QDialogButtonBox.Cancel).setText(self.t['cancel']); self.buttons.button(QDialogButtonBox.Apply).setText(self.t['apply']); self.buttons.button(QDialogButtonBox.Ok).setText(self.t['ok']); codes=['en','fa','da','de','es','no','fi','sv','fr','el','ar']; self.lang_combo.blockSignals(True); self.lang_combo.setCurrentIndex(codes.index(self.lang)); self.lang_combo.blockSignals(False); self.nav.setCurrentRow(min(self.nav.currentRow(),7)); self._apply_dialog_style()
     def _set_texts(self):
-        t=self.t; self.remember_last.setText(t['remember']); self.restore_zoom.setText(t['restore']); self.single_page.setText(t.get('single','Single-page reading mode')); self.confirm_close.setText(t['confirm']); self.status.setText(t['status']); self.center_page.setText(t['center']); self.page_shadow.setText(t['shadow']); self.theme_label.setText(t['theme']); self.accent_label.setText(t['accent']); self.aero.setText(t['aero']); self.large.setText(t['large']); self.show_icons.setText(t['toolbar']); self.compact.setText(t['compact']); self.animations.setText(t['animations']); self.theme_preview.setText(t.get('theme_preview','Material You Light • Live preview')); self.blue.setText(t['blue']); self.blue_label_title.setText(t['blue_strength']); self.warm.setText(t['night']); self.reduce_motion.setText(t['reduce']); self.contrast_label_title.setText(t['contrast']); self.fit.setItemText(0,t.get('fit_width','Fit Width')); self.fit.setItemText(1,t.get('fit_page','Fit Page')); self.fit.setItemText(2,t.get('fit_100','100%')); self.auto_fit.setText(t['autofit']); self.smooth_scroll.setText(t['scroll']); self.page_gap.setText(t['gap']); self.cache_pages.setText(t['cache']); self.smooth_render.setText(t.get('quality_render','High-quality rendering')); self.preload.setText(t['preload']); self.gpu.setText(t['gpu']); self.low_memory.setText(t['memory']); self.large_files.setText(t.get('large_files','Large PDF mode: pages are rendered on demand; the whole document is never loaded into RAM.')); self.audio_enabled.setText(t['audio_enabled']); self.autoplay.setText(t['autoplay']); self.volume_title.setText(t['volume']); self.shortcut_text.setText(t['shortcuts_desc']+'\n\nCtrl+O  '+t.get('open','Open')+'\nCtrl+S  '+t.get('save','Save')+'\nCtrl+F  '+t.get('search','Search')+'\nCtrl+0  '+t.get('reset_zoom','Reset zoom')+'\nF11  '+t.get('fullscreen','Fullscreen'))
+        t=self.t; self.remember_last.setText(t['remember']); self.restore_zoom.setText(t['restore']); self.single_page.setText(t.get('single','Single-page reading mode')); self.confirm_close.setText(t['confirm']); self.status.setText(t['status']); self.center_page.setText(t['center']); self.page_shadow.setText(t['shadow']); self.appearance_label.setText(t.get('appearance_mode','Appearance mode')); self.theme_label.setText(t['theme']); self.accent_label.setText(t['accent']); self.aero.setText(t['aero']); self.large.setText(t['large']); self.show_icons.setText(t['toolbar']); self.compact.setText(t['compact']); self.animations.setText(t['animations']); self.theme_preview.setText(t.get('theme_preview','Material You Light • Live preview')); self.blue.setText(t['blue']); self.blue_label_title.setText(t['blue_strength']); self.warm.setText(t['night']); self.reduce_motion.setText(t['reduce']); self.contrast_label_title.setText(t['contrast']); self.fit.setItemText(0,t.get('fit_width','Fit Width')); self.fit.setItemText(1,t.get('fit_page','Fit Page')); self.fit.setItemText(2,t.get('fit_100','100%')); self.auto_fit.setText(t['autofit']); self.smooth_scroll.setText(t['scroll']); self.page_gap.setText(t['gap']); self.cache_pages.setText(t['cache']); self.smooth_render.setText(t.get('quality_render','High-quality rendering')); self.preload.setText(t['preload']); self.gpu.setText(t['gpu']); self.low_memory.setText(t['memory']); self.large_files.setText(t.get('large_files','Large PDF mode: pages are rendered on demand; the whole document is never loaded into RAM.')); self.audio_enabled.setText(t['audio_enabled']); self.autoplay.setText(t['autoplay']); self.volume_title.setText(t['volume']); self.shortcut_text.setText(t['shortcuts_desc']+'\n\nCtrl+O  '+t.get('open','Open')+'\nCtrl+S  '+t.get('save','Save')+'\nCtrl+F  '+t.get('search','Search')+'\nCtrl+0  '+t.get('reset_zoom','Reset zoom')+'\nF11  '+t.get('fullscreen','Fullscreen'))
     def _language_from_settings(self,index):
         codes=['en','fa','da','de','es','no','fi','sv','fr','el','ar']; code=codes[index]
         if code!=self.lang: self.lang=code; self.viewer.apply_language(code); self._retranslate()
-    def _preview_style(self):
-        self.settings['theme']=self.theme.currentText(); self._apply_dialog_style(); self.theme_preview.setText(f"{self.theme.currentText()}  •  Material You Light  •  {self.t.get('live','Live preview')}")
+    def _preview_style(self,*_args):
+        self.settings["theme"] = self.theme.currentText()
+        self.settings["appearance_mode"] = self.appearance_mode.currentData() or "light"
+        self._apply_dialog_style()
+        mode_label = "Dark" if self.settings["appearance_mode"] == "dark" else "Light"
+        self.theme_preview.setText(f"{self.theme.currentText()}  •  {mode_label} appearance  •  {self.t.get('live','Live preview')}")
+
     def _apply_dialog_style(self):
-        accent=THEME_ACCENTS.get(self.settings.get('theme','Arctic Glass'),(58,141,255)); ah='#%02X%02X%02X'%accent
-        self.setStyleSheet(COLOR_THEMES.get(self.settings.get('theme','Arctic Glass'),COLOR_THEMES['Arctic Glass'])+f'''
-QDialog{{background:#F7F7FA;color:#172233;}}
-QFrame#settingsHeader{{background:#FFFFFF;border:1px solid #DFE3EA;border-radius:24px;}}
-QLabel#settingsTitle{{font-size:24px;font-weight:900;color:#172233;}}
-QLabel#settingsSubtitle{{font-size:13px;color:#667386;}}
-QLabel#settingsChip{{background:{soft_tone(ah)};color:{ah};border-radius:14px;padding:8px 12px;font-weight:800;}}
-QListWidget#settingsNav{{background:#FFFFFF;border:1px solid #DFE3EA;border-radius:20px;padding:8px;outline:0;}}
-QListWidget#settingsNav::item{{padding:14px 12px;border-radius:13px;margin:3px;color:#263241;font-weight:700;}}
-QListWidget#settingsNav::item:selected{{background:{ah};color:#FFFFFF;}}
+        theme=self.settings.get("theme","Arctic Glass")
+        dark=str(self.settings.get("appearance_mode","light")).lower()=="dark"
+        accent=THEME_ACCENTS.get(theme,(58,141,255)); ah="#%02X%02X%02X"%accent
+        panel="#172235" if dark else "#FFFFFF"
+        surface="#111827" if dark else "#F7F9FC"
+        text="#E5EDF7" if dark else "#172B49"
+        muted="#A8B7CA" if dark else "#66778E"
+        border="#30425A" if dark else "#D9E3EF"
+        selected="#244361" if dark else ah
+        self.setStyleSheet(_theme_stylesheet(theme,"dark" if dark else "light")+f'''
+QDialog{{background:{surface};color:{text};}}
+QFrame#settingsHeader{{background:{panel};border:1px solid {border};border-radius:20px;}}
+QLabel#settingsTitle{{font-size:24px;font-weight:800;color:{text};}}
+QLabel#settingsSubtitle{{font-size:13px;color:{muted};}}
+QLabel#settingsChip{{background:{selected};color:#FFFFFF;border-radius:14px;padding:8px 12px;font-weight:700;}}
+QListWidget#settingsNav{{background:{panel};border:1px solid {border};border-radius:16px;padding:8px;outline:0;}}
+QListWidget#settingsNav::item{{padding:13px 12px;border-radius:10px;margin:3px;color:{text};font-weight:600;}}
+QListWidget#settingsNav::item:selected{{background:{selected};color:#FFFFFF;}}
 QStackedWidget{{background:transparent;border:none;}}
 QWidget#settingsPage{{background:transparent;}}
 QScrollArea#settingsPageScroll{{background:transparent;border:none;}}
 QWidget#settingsPageContent{{background:transparent;}}
-QFrame#settingsCard{{background:#FFFFFF;border:1px solid #DDE2EA;border-radius:20px;min-height:92px;padding:0;}}
-QLabel#settingsCardTitle{{font-size:18px;font-weight:900;color:#172233;background:transparent;padding:0;min-height:30px;}}
-QLabel#settingsCardSubtitle{{font-size:12px;color:#69778A;background:transparent;min-height:20px;}}
+QFrame#settingsCard{{background:{panel};border:1px solid {border};border-radius:16px;min-height:92px;padding:0;}}
+QLabel#settingsCardTitle{{font-size:17px;font-weight:800;color:{text};background:transparent;padding:0;min-height:30px;}}
+QLabel#settingsCardSubtitle{{font-size:12px;color:{muted};background:transparent;min-height:20px;}}
 QScrollArea#settingsPageScroll > QWidget > QWidget{{background:transparent;}}
-QLabel{{color:#172233;}}
-QCheckBox{{font-size:13px;color:#253246;background:transparent;}}
+QLabel{{color:{text};}}
+QCheckBox{{font-size:13px;color:{text};background:transparent;}}
 QComboBox,QLineEdit,QSpinBox{{font-size:13px;min-height:40px;}}
-QFormLayout QLabel{{color:#253246;}}
+QFormLayout QLabel{{color:{text};}}
 ''')
+
     def _fade_in(self):
         self.effect=QGraphicsOpacityEffect(self); self.setGraphicsEffect(self.effect); self.anim=QPropertyAnimation(self.effect,b'opacity',self); self.anim.setDuration(240); self.anim.setStartValue(0.0); self.anim.setEndValue(1.0); self.anim.setEasingCurve(QEasingCurve.OutCubic); self.anim.start()
     def _switch_page(self,index):
@@ -457,9 +564,9 @@ QFormLayout QLabel{{color:#253246;}}
         if self.settings.get('animations',True) and not self.settings.get('reduce_motion',False):
             w=self.stack.currentWidget(); eff=QGraphicsOpacityEffect(w); w.setGraphicsEffect(eff); a=QPropertyAnimation(eff,b'opacity',w); a.setDuration(180); a.setStartValue(.35); a.setEndValue(1.0); a.setEasingCurve(QEasingCurve.OutCubic); w._page_anim=a; a.start()
     def collect(self):
-        return {'remember_last':self.remember_last.isChecked(),'restore_zoom':self.restore_zoom.isChecked(),'single_page':self.single_page.isChecked(),'confirm_close':self.confirm_close.isChecked(),'cache_pages':self.cache_pages.isChecked(),'smooth_render':self.smooth_render.isChecked(),'theme':self.theme.currentText(),'accent':self.accent.currentText(),'aero_enabled':self.aero.isChecked(),'compact_toolbar':self.compact.isChecked(),'status_bar':self.status.isChecked(),'page_shadow':self.page_shadow.isChecked(),'fit_mode':self.fit.currentText(),'zoom_step':self.zoom_step.value(),'rotation':self.rotation.currentText(),'auto_fit':self.auto_fit.isChecked(),'center_page':self.center_page.isChecked(),'audio_enabled':self.audio_enabled.isChecked(),'autoplay':self.autoplay.isChecked(),'volume':self.volume.value(),'large_toolbar':self.large.isChecked(),'show_toolbar_text':self.show_icons.isChecked(),'preload_pages':self.preload.isChecked(),'blue_filter':self.blue.isChecked(),'blue_filter_strength':self.blue_strength.value(),'night_reading':self.warm.isChecked(),'reduce_motion':self.reduce_motion.isChecked(),'ui_contrast':self.contrast.value(),'smooth_scroll':self.smooth_scroll.isChecked(),'page_gap':self.page_gap.isChecked(),'gpu_acceleration':self.gpu.isChecked(),'low_memory':self.low_memory.isChecked(),'animations':self.animations.isChecked(),'appearance_mode':'light'}
+        return {'remember_last':self.remember_last.isChecked(),'restore_zoom':self.restore_zoom.isChecked(),'single_page':self.single_page.isChecked(),'confirm_close':self.confirm_close.isChecked(),'cache_pages':self.cache_pages.isChecked(),'smooth_render':self.smooth_render.isChecked(),'theme':self.theme.currentText(),'accent':self.accent.currentText(),'aero_enabled':self.aero.isChecked(),'compact_toolbar':self.compact.isChecked(),'status_bar':self.status.isChecked(),'page_shadow':self.page_shadow.isChecked(),'fit_mode':self.fit.currentText(),'zoom_step':self.zoom_step.value(),'rotation':self.rotation.currentText(),'auto_fit':self.auto_fit.isChecked(),'center_page':self.center_page.isChecked(),'audio_enabled':self.audio_enabled.isChecked(),'autoplay':self.autoplay.isChecked(),'volume':self.volume.value(),'large_toolbar':self.large.isChecked(),'show_toolbar_text':self.show_icons.isChecked(),'preload_pages':self.preload.isChecked(),'blue_filter':self.blue.isChecked(),'blue_filter_strength':self.blue_strength.value(),'night_reading':self.warm.isChecked(),'reduce_motion':self.reduce_motion.isChecked(),'ui_contrast':self.contrast.value(),'smooth_scroll':self.smooth_scroll.isChecked(),'page_gap':self.page_gap.isChecked(),'gpu_acceleration':self.gpu.isChecked(),'low_memory':self.low_memory.isChecked(),'animations':self.animations.isChecked(),'appearance_mode':self.appearance_mode.currentData() or 'light'}
     def reset_defaults(self):
-        d={'remember_last':True,'restore_zoom':True,'confirm_close':True,'cache_pages':False,'smooth_render':True,'theme':'Arctic Glass','accent':'Theme default','aero_enabled':True,'compact_toolbar':False,'status_bar':True,'page_shadow':True,'fit_mode':'Fit Width','zoom_step':25,'rotation':'0°','auto_fit':True,'center_page':True,'audio_enabled':True,'autoplay':False,'volume':50,'large_toolbar':True,'show_toolbar_text':True,'preload_pages':False,'blue_filter':False,'blue_filter_strength':35,'night_reading':False,'reduce_motion':False,'ui_contrast':100,'smooth_scroll':True,'page_gap':True,'gpu_acceleration':True,'low_memory':True,'animations':True,'appearance_mode':'light'}; self.settings.update(d); self.theme.setCurrentText(d['theme']); self.accent.setCurrentText(d['accent']); self.blue.setChecked(False); self.blue_strength.setValue(35); self.warm.setChecked(False); self.contrast.setValue(100); self.aero.setChecked(True); self.animations.setChecked(True); self.reduce_motion.setChecked(False); self.smooth_scroll.setChecked(True); self.page_gap.setChecked(True); self.gpu.setChecked(True); self.low_memory.setChecked(True); self._preview_style()
+        d={'remember_last':True,'restore_zoom':True,'confirm_close':True,'cache_pages':False,'smooth_render':True,'theme':'Arctic Glass','accent':'Theme default','aero_enabled':True,'compact_toolbar':False,'status_bar':True,'page_shadow':True,'fit_mode':'Fit Width','zoom_step':25,'rotation':'0°','auto_fit':True,'center_page':True,'audio_enabled':True,'autoplay':False,'volume':50,'large_toolbar':True,'show_toolbar_text':True,'preload_pages':False,'blue_filter':False,'blue_filter_strength':35,'night_reading':False,'reduce_motion':False,'ui_contrast':100,'smooth_scroll':True,'page_gap':True,'gpu_acceleration':True,'low_memory':True,'animations':True,'appearance_mode':'light'}; self.settings.update(d); self.theme.setCurrentText(d['theme']); self.accent.setCurrentText(d['accent']); self.appearance_mode.setCurrentIndex(0); self.blue.setChecked(False); self.blue_strength.setValue(35); self.warm.setChecked(False); self.contrast.setValue(100); self.aero.setChecked(True); self.animations.setChecked(True); self.reduce_motion.setChecked(False); self.smooth_scroll.setChecked(True); self.page_gap.setChecked(True); self.gpu.setChecked(True); self.low_memory.setChecked(True); self._preview_style()
     def apply_changes(self):
         self.settings.update(self.collect()); self.viewer.app_settings.update(self.settings); self.viewer.apply_app_settings(); self.settings_changed.emit(self.settings)
     def accept(self): self.apply_changes(); super().accept()
@@ -651,7 +758,7 @@ class ParinPDFViewer(QMainWindow):
             'large_toolbar': self.settings_store.value('large_toolbar', True, type=bool),
             'show_toolbar_text': self.settings_store.value('show_toolbar_text', True, type=bool),
             'preload_pages': self.settings_store.value('preload_pages', True, type=bool),
-            'appearance_mode': 'light',
+            'appearance_mode': str(self.settings_store.value('appearance_mode', 'light', type=str)).lower(),
             'accent': self.settings_store.value('accent', 'آبی نئون'),
             'aero_enabled': self.settings_store.value('aero_enabled', True, type=bool),
             'blue_filter': self.settings_store.value('blue_filter', False, type=bool),
@@ -668,6 +775,7 @@ class ParinPDFViewer(QMainWindow):
 
         legacy_theme = clean_label(str(self.app_settings.get('theme','Arctic Glass')))
         self.app_settings['theme'] = legacy_theme if legacy_theme in COLOR_THEMES else 'Arctic Glass'
+        self.app_settings['appearance_mode'] = 'dark' if str(self.app_settings.get('appearance_mode','light')).lower() == 'dark' else 'light'
 
         self.selected_color = QColor(103, 80, 164)
 
@@ -704,8 +812,7 @@ class ParinPDFViewer(QMainWindow):
         dlg.exec()
 
     def _style_for_theme(self):
-        theme=self.app_settings.get('theme','Arctic Glass')
-        return COLOR_THEMES.get(theme, COLOR_THEMES['Arctic Glass'])
+        return _theme_stylesheet(self.app_settings.get('theme','Arctic Glass'), self.app_settings.get('appearance_mode','light'))
     def apply_app_settings(self):
         self.settings_store.setValue('settings',str(self.app_settings))
         for k,v in self.app_settings.items(): self.settings_store.setValue(k,v)
