@@ -60,8 +60,8 @@ class ZoomTests(unittest.TestCase):
 
 
 class VersionTests(unittest.TestCase):
-    def test_version_is_900(self):
-        self.assertEqual(APP_VERSION, "9.0.0")
+    def test_version_is_910(self):
+        self.assertEqual(APP_VERSION, "9.1.0")
 
 
 if __name__ == "__main__":
