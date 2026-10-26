@@ -14,10 +14,11 @@ from PySide6.QtWidgets import (
     QComboBox, QSlider, QTabWidget, QFormLayout, QGroupBox, QDialogButtonBox,
     QRadioButton, QButtonGroup, QAbstractItemView, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QDockWidget, QStackedWidget, QFrame, QToolButton, QSizePolicy, QStyle, QGraphicsOpacityEffect, QGraphicsDropShadowEffect, QGridLayout
 )
-from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen
+from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen, QPainterPath
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_files, ensure_pdf_extension, same_path, clamp_zoom
+from parin_handwriting_assist import SmartInkAssistant
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -171,93 +172,170 @@ def make_action_icon(symbol,size=20,accent=(53,111,216)):
     return QIcon(pm)
 
 class PDFPageLabel(QLabel):
+    """PDF canvas with low-latency live preview for ink annotations."""
     def __init__(self, viewer_instance):
         super().__init__()
         self.viewer = viewer_instance
         self.setAlignment(Qt.AlignCenter)
         self.current_stroke = []
+        self.current_stroke_view = []
         self.setMouseTracking(True)
+
+    def _preview_points(self):
+        points = [(point.x(), point.y()) for point in self.current_stroke_view]
+        assistant = getattr(self.viewer, "handwriting_assist", None)
+        if self.viewer.app_settings.get("smart_ink", True) and assistant is not None:
+            return assistant.smooth_points(points)
+        return points
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        hit = getattr(self.viewer, "search_highlight", None)
-        if not hit or not self.viewer.doc or hit.get("page") != self.viewer.current_page:
+        if not self.viewer.doc:
             return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
         try:
-            page = self.viewer.doc.load_page(self.viewer.current_page)
-            matrix = fitz.Matrix(self.viewer.zoom_factor, self.viewer.zoom_factor).prerotate(self.viewer.rotation)
-            bounds = page.rect * matrix
-            rect = fitz.Rect(hit["rect"]) * matrix
-            rect = fitz.Rect(rect.x0 - bounds.x0, rect.y0 - bounds.y0, rect.x1 - bounds.x0, rect.y1 - bounds.y0)
-            painter = QPainter(self)
-            painter.setRenderHint(QPainter.Antialiasing)
-            painter.setPen(QPen(QColor("#FFB300"), 2))
-            painter.setBrush(QColor(255, 193, 7, 52))
-            painter.drawRoundedRect(QRectF(rect.x0, rect.y0, rect.width, rect.height), 3.0, 3.0)
+            hit = getattr(self.viewer, "search_highlight", None)
+            if hit and hit.get("page") == self.viewer.current_page:
+                try:
+                    page = self.viewer.doc.load_page(self.viewer.current_page)
+                    matrix = fitz.Matrix(self.viewer.zoom_factor, self.viewer.zoom_factor).prerotate(self.viewer.rotation)
+                    bounds = page.rect * matrix
+                    rect = fitz.Rect(hit["rect"]) * matrix
+                    rect = fitz.Rect(rect.x0 - bounds.x0, rect.y0 - bounds.y0,
+                                     rect.x1 - bounds.x0, rect.y1 - bounds.y0)
+                    painter.setPen(QPen(QColor("#FFB300"), 2))
+                    painter.setBrush(QColor(255, 193, 7, 52))
+                    painter.drawRoundedRect(QRectF(rect.x0, rect.y0, rect.width, rect.height), 3.0, 3.0)
+                except Exception:
+                    pass
+
+            if self.viewer.is_drawing and self.current_stroke_view and self.viewer.active_tool in ("pen", "highlight"):
+                preview = self._preview_points()
+                if preview:
+                    r = self.viewer.selected_color.red()
+                    g = self.viewer.selected_color.green()
+                    b = self.viewer.selected_color.blue()
+                    if self.viewer.active_tool == "highlight":
+                        color = QColor(r, g, b, 100)
+                        width = max(5.0, 14.0 * self.viewer.zoom_factor)
+                    else:
+                        color = QColor(r, g, b, 255)
+                        width = max(1.0, 2.0 * self.viewer.zoom_factor)
+                    painter.setPen(QPen(color, width, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                    if len(preview) == 1:
+                        painter.drawPoint(QPointF(*preview[0]))
+                    else:
+                        path = QPainterPath(QPointF(*preview[0]))
+                        for x, y in preview[1:]:
+                            path.lineTo(QPointF(x, y))
+                        painter.drawPath(path)
+        finally:
             painter.end()
-        except Exception:
-            return
 
     def mousePressEvent(self, event: QMouseEvent):
-        if not self.viewer.doc or not self.viewer.active_tool or event.button() != Qt.LeftButton: 
+        if not self.viewer.doc or not self.viewer.active_tool or event.button() != Qt.LeftButton:
+            super().mousePressEvent(event)
             return
-        
         pdf_pt = self.viewer.get_pdf_coords(event.position())
         page = self.viewer.doc.load_page(self.viewer.current_page)
 
-        if self.viewer.active_tool in ['pen', 'highlight']:
+        if self.viewer.active_tool in ("pen", "highlight"):
             self.current_stroke = [(pdf_pt.x, pdf_pt.y)]
+            self.current_stroke_view = [QPointF(event.position())]
             self.viewer.is_drawing = True
+            self.update()
+            return
 
-        elif self.viewer.active_tool == 'eraser':
+        if self.viewer.active_tool == "eraser":
             self.viewer._record_undo()
             self.viewer.erase_at_point(page, pdf_pt)
+            self.update()
+            return
 
-        elif self.viewer.active_tool == 'text':
+        if self.viewer.active_tool == "text":
             t = TRANSLATIONS[self.viewer.current_lang]
             text, ok = QInputDialog.getText(self, t["add_text"], t["enter_text"])
-            if ok and text:
-                r, g, b = self.viewer.selected_color.redF(), self.viewer.selected_color.greenF(), self.viewer.selected_color.blueF()
+            if not ok or not text:
+                return
+            font_size = int(self.viewer.font_size.value()) if hasattr(self.viewer, "font_size") else 12
+            font_name = self.viewer.font_selector.currentData() if hasattr(self.viewer, "font_selector") else "helv"
+            font_name = str(font_name or "helv")
+            width = min(max(80.0, len(text) * font_size * 0.68), max(40.0, page.rect.width))
+            height = min(max(30.0, font_size * 2.6), max(20.0, page.rect.height))
+            x_max = max(page.rect.x0, page.rect.x1 - width)
+            y_max = max(page.rect.y0, page.rect.y1 - height)
+            x = min(max(page.rect.x0, pdf_pt.x), x_max)
+            y = min(max(page.rect.y0, pdf_pt.y), y_max)
+            rect = fitz.Rect(x, y, x + width, y + height)
+            r, g, b = (self.viewer.selected_color.redF(),
+                       self.viewer.selected_color.greenF(),
+                       self.viewer.selected_color.blueF())
+            try:
                 self.viewer._record_undo()
-                annot = page.add_freetext_annot(fitz.Rect(pdf_pt.x, pdf_pt.y, pdf_pt.x + 200, pdf_pt.y + 30), text, fontsize=12, text_color=(r, g, b))
+                annot = page.add_freetext_annot(
+                    rect, text, fontsize=font_size, fontname=font_name,
+                    text_color=(r, g, b), fill_color=None, border_width=0,
+                )
                 annot.update()
                 self.viewer.mark_document_modified()
                 self.viewer.render_page()
+            except Exception as exc:
+                QMessageBox.warning(self.viewer, "Text annotation", str(exc))
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        if not self.viewer.doc or not self.viewer.active_tool: 
+        if not self.viewer.doc or not self.viewer.active_tool:
+            super().mouseMoveEvent(event)
             return
-        
-        pdf_pt = self.viewer.get_pdf_coords(event.position())
-        page = self.viewer.doc.load_page(self.viewer.current_page)
-
-        if self.viewer.active_tool in ['pen', 'highlight'] and self.viewer.is_drawing:
+        if self.viewer.active_tool in ("pen", "highlight") and self.viewer.is_drawing:
+            pdf_pt = self.viewer.get_pdf_coords(event.position())
             self.current_stroke.append((pdf_pt.x, pdf_pt.y))
-
-        elif self.viewer.active_tool == 'eraser' and (event.buttons() & Qt.LeftButton):
+            self.current_stroke_view.append(QPointF(event.position()))
+            self.update()
+        elif self.viewer.active_tool == "eraser" and (event.buttons() & Qt.LeftButton):
+            pdf_pt = self.viewer.get_pdf_coords(event.position())
+            page = self.viewer.doc.load_page(self.viewer.current_page)
             self.viewer.erase_at_point(page, pdf_pt)
+            self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() != Qt.LeftButton:
+            super().mouseReleaseEvent(event)
+            return
         if self.viewer.is_drawing and len(self.current_stroke) > 1 and self.viewer.doc:
             page = self.viewer.doc.load_page(self.viewer.current_page)
-            r, g, b = self.viewer.selected_color.redF(), self.viewer.selected_color.greenF(), self.viewer.selected_color.blueF()
-
-            self.viewer._record_undo()
-            annot = page.add_ink_annot([self.current_stroke])
-            annot.set_colors(stroke=(r, g, b))
-            
-            if self.viewer.active_tool == 'pen':
-                annot.set_border(width=2)
-            elif self.viewer.active_tool == 'highlight':
-                annot.set_border(width=14)
-                annot.set_opacity(0.35)
-
-            annot.update()
-            self.viewer.mark_document_modified()
-            self.viewer.render_page()
-
-        self.viewer.is_drawing = False
-        self.current_stroke = []
+            stroke = list(self.current_stroke)
+            if self.viewer.app_settings.get("smart_ink", True):
+                stroke = self.viewer.handwriting_assist.smooth_points(stroke)
+            self.viewer.is_drawing = False
+            self.current_stroke = []
+            self.current_stroke_view = []
+            self.update()
+            r, g, b = (self.viewer.selected_color.redF(),
+                       self.viewer.selected_color.greenF(),
+                       self.viewer.selected_color.blueF())
+            try:
+                self.viewer._record_undo()
+                annot = page.add_ink_annot([stroke])
+                annot.set_colors(stroke=(r, g, b))
+                if self.viewer.active_tool == "pen":
+                    annot.set_border(width=2)
+                elif self.viewer.active_tool == "highlight":
+                    annot.set_border(width=14)
+                    annot.set_opacity(0.35)
+                annot.update()
+                if self.viewer.app_settings.get("smart_ink", True):
+                    profile = self.viewer.handwriting_assist.describe_style(stroke)
+                    self.viewer.statusBar().showMessage(f"Smart Ink · {profile} stroke", 1800)
+                self.viewer.mark_document_modified()
+                self.viewer.render_page()
+            except Exception as exc:
+                QMessageBox.warning(self.viewer, "Ink annotation", str(exc))
+        else:
+            self.viewer.is_drawing = False
+            self.current_stroke = []
+            self.current_stroke_view = []
+            self.update()
 
 
 def make_app_icon(size=64):
