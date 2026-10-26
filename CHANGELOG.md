@@ -12,7 +12,7 @@ Continues from `feature/v9.0` without changing `main`.
 ### Python + Rust architecture
 - Add an optional PyO3-based Rust native extension for zoom normalization.
 - Keep the Python implementation as a compatibility fallback for source runs where the extension is not installed.
-- Add Rust unit tests and CI checks; the Debian build installs the Rust extension before freezing the app.
+- Add Rust unit tests and CI checks; CI builds and installs the extension wheel directly, while the Debian build installs the Rust extension in its dedicated virtual environment before freezing the app.
 - Align application and Debian package versioning and workflow artifact names at 9.1.0.
 
 
