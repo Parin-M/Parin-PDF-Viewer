@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-VERSION="9.1.1"
+VERSION="9.1.2"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"

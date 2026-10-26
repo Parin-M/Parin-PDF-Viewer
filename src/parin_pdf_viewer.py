@@ -181,6 +181,55 @@ class PDFPageLabel(QLabel):
         self.current_stroke_view = []
         self.setMouseTracking(True)
 
+    def wheelEvent(self, event):
+        """Scroll the PDF canvas directly and carry movement across page edges."""
+        viewer = self.viewer
+        if not viewer.doc or not hasattr(viewer, "scroll_area"):
+            super().wheelEvent(event)
+            return
+
+        pixel_delta = event.pixelDelta().y()
+        angle_delta = event.angleDelta().y()
+        if event.modifiers() & Qt.ControlModifier:
+            direction = pixel_delta if pixel_delta else angle_delta
+            if direction > 0:
+                viewer.zoom_in()
+            elif direction < 0:
+                viewer.zoom_out()
+            event.accept()
+            return
+
+        bar = viewer.scroll_area.verticalScrollBar()
+        # Mouse wheels use angleDelta; touchpads can provide pixelDelta.
+        if pixel_delta:
+            movement = -pixel_delta
+        elif angle_delta:
+            movement = -round((angle_delta / 120.0) * max(24, bar.singleStep()) * 3)
+        else:
+            super().wheelEvent(event)
+            return
+
+        target = bar.value() + movement
+        if target < bar.minimum() and viewer.current_page > 0:
+            overflow = bar.minimum() - target
+            viewer.prev_page()
+            QTimer.singleShot(
+                0,
+                lambda amount=overflow, scroll_bar=bar:
+                    scroll_bar.setValue(max(scroll_bar.minimum(), scroll_bar.maximum() - amount)),
+            )
+        elif target > bar.maximum() and viewer.current_page < viewer.doc.page_count - 1:
+            overflow = target - bar.maximum()
+            viewer.next_page()
+            QTimer.singleShot(
+                0,
+                lambda amount=overflow, scroll_bar=bar:
+                    scroll_bar.setValue(min(scroll_bar.maximum(), scroll_bar.minimum() + amount)),
+            )
+        else:
+            bar.setValue(max(bar.minimum(), min(bar.maximum(), target)))
+        event.accept()
+
     def _preview_points(self):
         points = [(point.x(), point.y()) for point in self.current_stroke_view]
         assistant = getattr(self.viewer, "handwriting_assist", None)
@@ -1073,7 +1122,7 @@ QDialog{{background:{dialog_bg};}}
         # that can clip the page and offsets the live-ink overlay coordinates.
         self.scroll_area.setWidgetResizable(False)
         self.scroll_area.setFrameShape(QFrame.NoFrame)
-        self.scroll_area.setAlignment(Qt.AlignCenter)
+        self.scroll_area.setAlignment(Qt.AlignHCenter | Qt.AlignTop)
         self.page_label=PDFPageLabel(self)
         self.page_label.setObjectName("pdf_page")
         self.page_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
@@ -1770,6 +1819,7 @@ QDialog{{background:{dialog_bg};}}
                 self.app_settings["cache_pages"] = False
                 self.app_settings["preload_pages"] = False
             self.current_page = 0
+            self._last_rendered_page_index = None
             self.zoom_factor = 1.0
             self.rotation = {"0°": 0, "90°": 90, "180°": 180, "270°": 270}.get(self.app_settings.get("rotation", "0°"), 0)
             self.fit_mode = {"Fit Width": "width", "Fit Page": "page", "100%": None}.get(self.app_settings.get("fit_mode", "Fit Width"), "width")
@@ -1827,6 +1877,7 @@ QDialog{{background:{dialog_bg};}}
         if not self.doc or not (0 <= self.current_page < self.doc.page_count):
             return
         try:
+            page_changed = getattr(self, "_last_rendered_page_index", None) != self.current_page
             page = self.doc.load_page(self.current_page)
             self.zoom_factor = clamp_zoom(self.zoom_factor)
             mat = fitz.Matrix(self.zoom_factor, self.zoom_factor).prerotate(self.rotation)
@@ -1841,6 +1892,11 @@ QDialog{{background:{dialog_bg};}}
             # the QLabel, and annotation coordinates remain image-relative.
             self.page_label.resize(rendered_pixmap.size())
             self.page_label.updateGeometry()
+            if page_changed:
+                self._last_rendered_page_index = self.current_page
+                # New pages start at the top; normal re-renders preserve scroll.
+                self.scroll_area.horizontalScrollBar().setValue(0)
+                self.scroll_area.verticalScrollBar().setValue(0)
             if not self._navigation_needs_refresh and hasattr(self, "page_list") and 0 <= self.current_page < self.page_list.count() and self.page_list.currentRow() != self.current_page:
                 self.page_list.blockSignals(True)
                 self.page_list.setCurrentRow(self.current_page)

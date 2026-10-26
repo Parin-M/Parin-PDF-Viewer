@@ -1,5 +1,12 @@
 # Changelog
 
+## 9.1.2 — PDF scrolling and page transitions
+
+- Handle mouse-wheel and touchpad scrolling directly on the PDF canvas, including Ctrl+wheel zoom.
+- Continue into adjacent pages at the scroll boundaries while carrying over scroll distance.
+- Reset the scroll offset when the displayed page changes, avoiding stale offsets and blank-looking views.
+- Add a regression test for vertical scrolling and cross-page navigation, and bump package/CI versions to 9.1.2.
+
 ## 9.1.1 — PDF rendering fix
 
 - Keep the PDF canvas at the exact dimensions of the rendered pixmap instead of allowing the scroll area to resize the page label independently.

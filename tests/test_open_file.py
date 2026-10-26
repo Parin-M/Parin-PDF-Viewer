@@ -7,7 +7,8 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pymupdf as fitz
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QPoint, QPointF, Qt, QUrl
+from PySide6.QtGui import QWheelEvent
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from parin_pdf_viewer import ParinPDFViewer, _startup_pdf_path
@@ -104,6 +105,54 @@ class PdfOpenRegressionTests(unittest.TestCase):
                     color = rendered.pixelColor(x, y)
                     self.assertGreater(color.red(), 200, f"Expected red page content at ({x}, {y}), got {color.name()}")
                     self.assertLess(color.green(), 100, f"Expected red page content at ({x}, {y}), got {color.name()}")
+                finally:
+                    viewer.close()
+                    self.app.processEvents()
+
+    def test_mouse_wheel_scrolls_and_crosses_pages_without_blank_canvas(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "long-document.pdf"
+            document = fitz.open()
+            for index in range(3):
+                page = document.new_page(width=595, height=1200)
+                page.insert_text((72, 90), f"Visible content on page {index + 1}", fontsize=24)
+                page.draw_rect(fitz.Rect(60, 120, 500, 1100), color=(0, 0.4, 0.8), width=3)
+            document.save(str(path))
+            document.close()
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                try:
+                    viewer.resize(1280, 850)
+                    viewer.show()
+                    self.app.processEvents()
+                    viewer.open_file(str(path))
+                    self.app.processEvents()
+                    self.app.processEvents()
+
+                    bar = viewer.scroll_area.verticalScrollBar()
+                    self.assertGreater(bar.maximum(), 0, "a tall page must have a vertical scroll range")
+                    start = bar.value()
+                    event = QWheelEvent(
+                        QPointF(30, 30), QPointF(30, 30), QPoint(0, 0), QPoint(0, -120),
+                        Qt.NoButton, Qt.NoModifier, Qt.ScrollPhase.ScrollUpdate, False,
+                    )
+                    self.app.sendEvent(viewer.page_label, event)
+                    self.app.processEvents()
+                    self.assertGreater(bar.value(), start, "wheel-down must move the PDF canvas down")
+
+                    # Reaching the bottom and scrolling again should enter the next page.
+                    bar.setValue(bar.maximum())
+                    event = QWheelEvent(
+                        QPointF(30, 30), QPointF(30, 30), QPoint(0, 0), QPoint(0, -120),
+                        Qt.NoButton, Qt.NoModifier, Qt.ScrollPhase.ScrollUpdate, False,
+                    )
+                    self.app.sendEvent(viewer.page_label, event)
+                    self.app.processEvents()
+                    self.app.processEvents()
+                    self.assertEqual(viewer.current_page, 1)
+                    self.assertFalse(viewer.page_label.pixmap().isNull())
+                    self.assertLess(bar.value(), bar.maximum(), "the next page should continue from its top")
                 finally:
                     viewer.close()
                     self.app.processEvents()
