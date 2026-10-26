@@ -6,7 +6,8 @@ Continues from `feature/v9.0` without changing `main`.
 
 ### Interface refresh
 - Refine the shared Qt visual system with a calmer blue-gray palette, consistent rounded controls, clearer keyboard-focus states, improved tabs, menus, tooltips, and scrollbars.
-- Improve visual hierarchy for the application header, toolbar groups, and status bar while preserving the existing theme selector and localized interface.
+- Apply the approved workspace direction: a deep navy brand header with high-contrast title and controls, a coordinated search field, a pale blue-gray toolbar with separated white tool groups, and a neutral PDF canvas.
+- Align toolbar icon gradients with the selected theme accent and increase spacing in the header and tool groups while preserving the theme selector and localized interface.
 
 ### Python + Rust architecture
 - Add an optional PyO3-based Rust native extension for zoom normalization.
