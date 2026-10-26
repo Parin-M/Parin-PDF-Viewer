@@ -1,5 +1,16 @@
 # Changelog
 
+## 9.1.0 — Development branch
+
+Continues from `feature/v9.0` without changing `main`.
+
+### Python + Rust architecture
+- Add an optional PyO3-based Rust native extension for zoom normalization.
+- Keep the Python implementation as a compatibility fallback for source runs where the extension is not installed.
+- Add Rust unit tests and CI checks; the Debian build installs the Rust extension before freezing the app.
+- Align application and Debian package versioning and workflow artifact names at 9.1.0.
+
+
 ## 9.0.0 — Development branch
 
 Version 9.0.0 continues the 8.9 reliability work and adds a localized About page, page organization, and bounded annotation/document undo history. This is a development build until CI, package installation, and GUI smoke tests have been reviewed.
