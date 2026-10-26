@@ -791,6 +791,7 @@ class ParinPDFViewer(QMainWindow):
         self.rotation = 0
         self.render_pending = False
         self._last_viewport_size = None
+        self._open_render_generation = 0
         self.is_drawing = False
         self.large_file_mode = False
 
@@ -1792,6 +1793,12 @@ QDialog{{background:{dialog_bg};}}
             if hasattr(self,'workspace_stack'):
                 self.workspace_stack.setCurrentWidget(self.scroll_area)
             self._apply_fit() if self.fit_mode in ('width', 'page') else self.render_page()
+            # Re-render once the stacked page has completed its layout pass.
+            # This avoids fitting against a hidden/zero-sized viewport when a
+            # document is opened immediately after application startup.
+            self._open_render_generation += 1
+            render_generation = self._open_render_generation
+            QTimer.singleShot(0, lambda generation=render_generation: self._finish_open_render(generation))
             self._add_recent_file(file_path)
             self._persist_reading_position()
             self.statusBar().showMessage(f"Opened {Path(file_path).name} · {self.doc.page_count} pages", 5000)
@@ -1802,6 +1809,16 @@ QDialog{{background:{dialog_bg};}}
                 except Exception:
                     pass
             QMessageBox.critical(self, "Cannot open PDF", f"The file could not be opened.\\n\\n{exc}")
+
+    def _finish_open_render(self, generation):
+        if generation != self._open_render_generation or not self.doc:
+            return
+        if hasattr(self, "workspace_stack"):
+            self.workspace_stack.setCurrentWidget(self.scroll_area)
+        self.scroll_area.ensurePolished()
+        viewport_size = self.scroll_area.viewport().size()
+        self._last_viewport_size = (viewport_size.width(), viewport_size.height())
+        self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
 
     def _effective_page_size(self, page):
         return (page.rect.height, page.rect.width) if self.rotation % 180 else (page.rect.width, page.rect.height)
