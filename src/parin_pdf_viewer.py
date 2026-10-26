@@ -848,13 +848,15 @@ class ParinPDFViewer(QMainWindow):
             'page_gap': self.settings_store.value('page_gap', True, type=bool),
             'gpu_acceleration': self.settings_store.value('gpu_acceleration', True, type=bool),
             'low_memory': self.settings_store.value('low_memory', False, type=bool),
-            'animations': self.settings_store.value('animations', True, type=bool)
+            'animations': self.settings_store.value('animations', True, type=bool),
+            'smart_ink': self.settings_store.value('smart_ink', True, type=bool)
         }
 
         legacy_theme = clean_label(str(self.app_settings.get('theme','Arctic Glass')))
         self.app_settings['theme'] = legacy_theme if legacy_theme in COLOR_THEMES else 'Arctic Glass'
         self.app_settings['appearance_mode'] = 'dark' if str(self.app_settings.get('appearance_mode','light')).lower() == 'dark' else 'light'
 
+        self.handwriting_assist = SmartInkAssistant()
         self.selected_color = QColor(103, 80, 164)
 
         self.player = QMediaPlayer(self)
@@ -962,9 +964,11 @@ QDialog{{background:{dialog_bg};}}
         self._refresh_welcome_page()
         self._update_page_indicator()
         self.statusBar().setVisible(bool(self.app_settings.get('status_bar',True)))
+        if hasattr(self,'btn_smart_ink'):
+            self.btn_smart_ink.blockSignals(True); self.btn_smart_ink.setChecked(bool(self.app_settings.get('smart_ink',True))); self.btn_smart_ink.blockSignals(False)
         self.audio_output.setVolume(max(0,min(100,int(self.app_settings.get('volume',50))))/100)
         compact=bool(self.app_settings.get('compact_toolbar',False)); large=bool(self.app_settings.get('large_toolbar',True))
-        names=['btn_open','btn_save','btn_print_opt','btn_pen','btn_highlight','btn_eraser','btn_add_text','btn_color','btn_fit_width','btn_fit_page','btn_reset_zoom','btn_prev','btn_next','btn_rotate_left','btn_rotate_right','btn_fullscreen','btn_lofi','btn_more','btn_navigation','btn_settings','btn_lang']
+        names=['btn_open','btn_save','btn_print_opt','btn_pen','btn_highlight','btn_eraser','btn_add_text','btn_color','btn_fit_width','btn_fit_page','btn_reset_zoom','btn_prev','btn_next','btn_rotate_left','btn_rotate_right','btn_fullscreen','btn_lofi','btn_more','btn_navigation','btn_smart_ink','btn_settings','btn_lang']
         for b in [getattr(self,n,None) for n in names]:
             if b:
                 b.setMinimumHeight(32 if compact else (44 if large else 38)); b.setIconSize(QSize(24,24))
@@ -1014,17 +1018,21 @@ QDialog{{background:{dialog_bg};}}
             for b in buttons: gl.addWidget(b)
             row.addWidget(box)
         self.btn_open=self.create_btn("Open PDF",self.open_file,icon_key="Open"); self.btn_save=self.create_btn("Save PDF",self.save_file,icon_key="Save"); self.btn_print_opt=self.create_btn("Print",self.print_document,icon_key="Print")
-        self.btn_pen=self.create_btn("Pen",lambda:self.toggle_tool('pen'),True,"Pen"); self.btn_highlight=self.create_btn("Highlight",lambda:self.toggle_tool('highlight'),True,"Highlight"); self.btn_eraser=self.create_btn("Eraser",lambda:self.toggle_tool('eraser'),True,"Eraser"); self.btn_add_text=self.create_btn("Text",lambda:self.toggle_tool('text'),True,"Text"); self.btn_color=self.create_btn("Color",self.choose_color,icon_key="Color"); self.update_color_btn_style()
+        self.btn_pen=self.create_btn("Pen",lambda:self.toggle_tool('pen'),True,"Pen"); self.btn_highlight=self.create_btn("Highlight",lambda:self.toggle_tool('highlight'),True,"Highlight"); self.btn_eraser=self.create_btn("Eraser",lambda:self.toggle_tool('eraser'),True,"Eraser"); self.btn_add_text=self.create_btn("Text",lambda:self.toggle_tool('text'),True,"Text")
+        self.font_selector=QComboBox(); self.font_selector.addItem("Sans serif","helv"); self.font_selector.addItem("Serif","tiro"); self.font_selector.addItem("Monospace","cour"); self.font_selector.setMinimumWidth(100); self.font_selector.setMaximumWidth(124); self.font_selector.setToolTip("Font used for the next text annotation")
+        self.font_size=QSpinBox(); self.font_size.setRange(6,72); self.font_size.setValue(12); self.font_size.setSuffix(" pt"); self.font_size.setFixedWidth(76); self.font_size.setToolTip("Font size used for the next text annotation")
+        self.btn_color=self.create_btn("Color",self.choose_color,icon_key="Color"); self.update_color_btn_style()
+        self.btn_smart_ink=self.create_btn("Smart Ink",self.toggle_smart_ink,True,"Pen"); self.btn_smart_ink.setChecked(bool(self.app_settings.get("smart_ink",True))); self.btn_smart_ink.setToolTip("Local adaptive ink smoothing; no cloud or model download required.")
         self.btn_zoom_out=self.create_btn("−",self.zoom_out); self.btn_zoom_in=self.create_btn("+",self.zoom_in); self.btn_fit_width=self.create_btn("Fit Width",self.fit_width,icon_key="Fit"); self.btn_fit_page=self.create_btn("Fit Page",self.fit_page,icon_key="Fit"); self.btn_reset_zoom=self.create_btn("100%",self.reset_zoom)
         self.btn_prev=self.create_btn("Prev",self.prev_page,icon_key="Prev"); self.btn_next=self.create_btn("Next",self.next_page,icon_key="Next"); self.lbl_page=QLabel("Page:"); self.spin_page=QSpinBox(); self.spin_page.setMinimum(1); self.spin_page.setFixedWidth(82); self.spin_page.valueChanged.connect(self.go_to_page)
         self.btn_rotate_left=self.create_btn("Rotate",lambda:self.rotate(-90),icon_key="Rotate"); self.btn_rotate_right=self.create_btn("Rotate",lambda:self.rotate(90),icon_key="Rotate"); self.btn_fullscreen=self.create_btn("Fullscreen",self.toggle_fullscreen,icon_key="Fullscreen")
         self.btn_lofi=self.create_btn("Lo-Fi",self.toggle_lofi,icon_key="Lo-Fi")
         add_group(row1,"FILE",[self.btn_open,self.btn_save,self.btn_print_opt])
-        add_group(row1,"ANNOTATE",[self.btn_pen,self.btn_highlight,self.btn_eraser,self.btn_add_text,self.btn_color])
+        add_group(row1,"ANNOTATE",[self.btn_pen,self.btn_highlight,self.btn_eraser,self.btn_add_text,self.font_selector,self.font_size,self.btn_color])
         row1.addStretch(); tl.addLayout(row1)
         add_group(row2,"VIEW",[self.btn_zoom_out,self.btn_zoom_in,self.btn_fit_width,self.btn_fit_page,self.btn_reset_zoom])
         add_group(row2,"PAGE",[self.btn_prev,self.lbl_page,self.spin_page,self.btn_next])
-        add_group(row2,"TOOLS",[self.btn_rotate_left,self.btn_rotate_right,self.btn_fullscreen,self.btn_lofi])
+        add_group(row2,"TOOLS",[self.btn_rotate_left,self.btn_rotate_right,self.btn_smart_ink,self.btn_fullscreen,self.btn_lofi])
         self.btn_more=self.create_btn("More",None,icon_key="More"); more=QMenu(self)
         self.more_actions=[]
         for text,slot,ikey in [("Search PDF",self.search_pdf,"Search"),("Remove Password",self.remove_password,"Remove"),("Set Password",self.add_password,"Set"),("Settings",self.open_settings,"Settings")]:
@@ -1655,7 +1663,28 @@ QDialog{{background:{dialog_bg};}}
         if not hasattr(self,'blue_overlay'): return
         strength=max(0,min(100,int(self.app_settings.get('blue_filter_strength',35)))); enabled=bool(self.app_settings.get('blue_filter',False)); alpha=int(20+strength*1.5); self.blue_overlay.setStyleSheet(f'background:rgba(255,166,66,{alpha});border:none;'); self.blue_overlay.setVisible(enabled and strength>0); self.blue_overlay.raise_()
 
+    def toggle_smart_ink(self, enabled=None):
+        if enabled is None:
+            enabled = not bool(self.app_settings.get("smart_ink", True))
+        self.app_settings["smart_ink"] = bool(enabled)
+        self.settings_store.setValue("smart_ink", bool(enabled))
+        if hasattr(self, "btn_smart_ink"):
+            self.btn_smart_ink.blockSignals(True)
+            self.btn_smart_ink.setChecked(bool(enabled))
+            self.btn_smart_ink.blockSignals(False)
+        if hasattr(self, "statusBar"):
+            if self.current_lang == "fa":
+                status = "فعال" if enabled else "غیرفعال"
+                self.statusBar().showMessage(f"قلم هوشمند {status}", 2400)
+            else:
+                self.statusBar().showMessage(f"Smart Ink {'on' if enabled else 'off'}", 2400)
+        if hasattr(self, "page_label"):
+            self.page_label.update()
+
     def toggle_tool(self, tool_name):
+        self.page_label.current_stroke = []
+        self.page_label.current_stroke_view = []
+        self.is_drawing = False
         if self.active_tool == tool_name:
             self.active_tool = None
         else:
@@ -2176,6 +2205,23 @@ QDialog{{background:{dialog_bg};}}
             btn.setText(t[key])
 
         self.lbl_page.setText(t['page'])
+        smart_labels = {
+            "en": ("Smart Ink", "Font for new text annotations", "Font size for new text annotations"),
+            "fa": ("قلم هوشمند", "فونت متن جدید", "اندازهٔ فونت متن جدید"),
+            "de": ("Intelligente Tinte", "Schrift für neue Textanmerkungen", "Schriftgröße für neue Textanmerkungen"),
+            "es": ("Tinta inteligente", "Fuente para texto nuevo", "Tamaño de fuente para texto nuevo"),
+            "fr": ("Encre intelligente", "Police du nouveau texte", "Taille de police du nouveau texte"),
+            "da": ("Smart blæk", "Skrifttype til ny tekst", "Skriftstørrelse til ny tekst"),
+            "no": ("Smart blekk", "Skrift for ny tekst", "Skriftstørrelse for ny tekst"),
+            "fi": ("Älykäs muste", "Uuden tekstin fontti", "Uuden tekstin fonttikoko"),
+            "sv": ("Smart bläck", "Teckensnitt för ny text", "Teckenstorlek för ny text"),
+            "el": ("Έξυπνη μελάνη", "Γραμματοσειρά νέου κειμένου", "Μέγεθος γραμματοσειράς νέου κειμένου"),
+            "ar": ("حبر ذكي", "خط النص الجديد", "حجم خط النص الجديد")
+        }.get(code, ("Smart Ink", "Font for new text annotations", "Font size for new text annotations"))
+        self.btn_smart_ink.setText(smart_labels[0])
+        self.btn_smart_ink.setToolTip("هموارسازی تطبیقی و محلی مسیر قلم؛ بدون ارسال داده یا دانلود مدل" if code == "fa" else "Local adaptive ink smoothing; no cloud/model download.")
+        self.font_selector.setToolTip(smart_labels[1])
+        self.font_size.setToolTip(smart_labels[2])
         self.btn_lofi.setText(t['music_stop'] if self.is_lofi_playing else t['lofi'])
         self.quick_search.setPlaceholderText(t['search'] + '…')
         QApplication.setLayoutDirection(t['dir'])
