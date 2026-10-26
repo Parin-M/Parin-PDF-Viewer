@@ -873,7 +873,7 @@ QDockWidget{{color:{'#E5EDF7' if dark else '#23334D'};font-weight:700;}}
 QDockWidget::title{{background:{tool_bg};padding:9px 12px;border-bottom:1px solid {border};}}
 QDialog{{background:{dialog_bg};}}
 '''
-        self.setStyleSheet(base+common)        self.setStyleSheet(base+common)
+        self.setStyleSheet(base+common)
         if hasattr(self,'page_label'):
             if self.app_settings.get('page_shadow',True):
                 shadow=QGraphicsDropShadowEffect(self.page_label); shadow.setBlurRadius(26); shadow.setOffset(0,4); shadow.setColor(QColor(0,0,0,100 if dark else 52)); self.page_label.setGraphicsEffect(shadow)
@@ -1340,6 +1340,7 @@ QDialog{{background:{dialog_bg};}}
 
     def mark_document_modified(self):
         self._document_dirty = True
+        self._update_page_indicator()
         if hasattr(self, "statusBar"):
             self.statusBar().showMessage("Unsaved PDF changes", 4000)
 
@@ -1528,6 +1529,20 @@ QDialog{{background:{dialog_bg};}}
         if answer == QMessageBox.Save:
             return bool(self.save_file())
         return answer == QMessageBox.Discard
+
+    def dragEnterEvent(self,event):
+        if event.mimeData().hasUrls() and any(url.isLocalFile() and url.toLocalFile().lower().endswith(".pdf") for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dropEvent(self,event):
+        for url in event.mimeData().urls():
+            if url.isLocalFile() and url.toLocalFile().lower().endswith(".pdf"):
+                event.acceptProposedAction()
+                self.open_file(url.toLocalFile())
+                return
+        event.ignore()
 
     def closeEvent(self, event):
         if not self._confirm_unsaved_changes():
@@ -1829,6 +1844,14 @@ QDialog{{background:{dialog_bg};}}
         if hasattr(self,'lbl_page'):
             t=TRANSLATIONS[self.current_lang]
             self.lbl_page.setText(f"{t['page']} {self.current_page+1} {t['of']} {self.doc.page_count if self.doc else 0}")
+        if hasattr(self,"status_page"):
+            self.status_page.setText(f"Page {self.current_page+1} / {self.doc.page_count}" if self.doc else "No PDF open")
+            self.status_zoom.setText(f"{round(self.zoom_factor*100)}%")
+            dirty=bool(self._document_dirty)
+            self.status_dirty.setText("Unsaved changes" if dirty else ("Saved" if self.doc else "Ready"))
+            self.status_dirty.setProperty("dirty","true" if dirty else "false")
+            self.status_dirty.style().unpolish(self.status_dirty)
+            self.status_dirty.style().polish(self.status_dirty)
 
     def zoom_in(self):
 
