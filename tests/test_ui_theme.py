@@ -69,5 +69,25 @@ class InterfaceThemeTests(unittest.TestCase):
                 self.app.processEvents()
 
 
+    def test_text_font_size_and_smart_ink_controls(self):
+        with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+            viewer = ParinPDFViewer()
+            try:
+                self.assertEqual(viewer.font_selector.count(), 3)
+                viewer.font_selector.setCurrentIndex(2)
+                viewer.font_size.setValue(26)
+                self.assertEqual(viewer.font_selector.currentData(), "cour")
+                self.assertEqual(viewer.font_size.value(), 26)
+
+                viewer.toggle_smart_ink(False)
+                self.assertFalse(viewer.app_settings["smart_ink"])
+                self.assertFalse(viewer.settings_store.value("smart_ink", True))
+                viewer.toggle_smart_ink(True)
+                self.assertTrue(viewer.app_settings["smart_ink"])
+            finally:
+                viewer.close()
+                self.app.processEvents()
+
+
 if __name__ == "__main__":
     unittest.main()
