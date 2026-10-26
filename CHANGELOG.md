@@ -14,6 +14,8 @@ Continues from `feature/v9.0` without changing `main`.
 - Add optional offline Smart Ink smoothing that adapts to stroke geometry, preserves endpoints and stronger turns, and reports a simple stroke-shape profile without uploading document content.
 - Add font-family and 6–72 pt size controls for new text annotations; keep the selected Smart Ink preference between launches.
 - Document the limitation explicitly: this lightweight helper stabilizes ink paths but does not claim handwriting-to-text recognition.
+- Fix opening PDFs passed by the Linux desktop launcher (`%U` file URLs), include uppercase `.PDF` in the file picker, and retry password prompts without discarding the current document on cancellation/failure.
+- Add headless integration regressions for local file URLs, valid PDF loading, uppercase extensions, and failed-open recovery.
 
 ### Python + Rust architecture
 - Add an optional PyO3-based Rust native extension for zoom normalization.
