@@ -75,26 +75,40 @@ THEME_DEFINITIONS = [
 ]
 
 def _build_light_theme(accent, soft, surface):
-    return f'''QMainWindow,QWidget{{background:{surface};color:#1B1B1F;}}
+    # Shared visual system: calm surfaces, clear focus states, and consistent controls.
+    return f'''QMainWindow,QWidget{{background:{surface};color:#182338;font-family:"Inter","Noto Sans",sans-serif;font-size:10pt;}}
+QMainWindow{{background:{surface};}}
 QScrollArea{{background:transparent;border:none;}}
-QLabel{{color:#1B1B1F;}}
-QPushButton{{background:rgba(255,255,255,.82);color:#25252A;border:1px solid #D8D8DE;border-radius:14px;padding:9px 14px;font-weight:700;}}
+QLabel{{color:#182338;background:transparent;}}
+QPushButton{{background:#FFFFFF;color:#23334D;border:1px solid #D8E2EF;border-radius:10px;padding:8px 13px;font-weight:600;}}
 QPushButton:hover{{background:{soft};border-color:{accent};}}
-QPushButton:pressed,QPushButton:checked{{background:{soft};border:2px solid {accent};color:#1A1A1F;}}
-QSpinBox,QLineEdit,QComboBox{{background:#FFFFFF;color:#1B1B1F;border:1px solid #CFCFD6;border-radius:12px;padding:8px 10px;selection-background-color:{accent};selection-color:white;}}
-QLineEdit:focus,QComboBox:focus,QSpinBox:focus{{border:2px solid {accent};}}
-QMenu{{background:#FFFFFF;color:#1B1B1F;border:1px solid #D5D5DC;border-radius:14px;padding:6px;}}
-QMenu::item{{padding:9px 16px;border-radius:9px;}}
-QMenu::item:selected{{background:{soft};color:#17171B;}}
-QCheckBox{{color:#25252A;spacing:9px;padding:7px;}}
-QCheckBox::indicator{{width:20px;height:20px;border-radius:10px;border:2px solid #8A8A93;background:#FFFFFF;}}
+QPushButton:pressed{{background:{soft};border:1px solid {accent};padding-top:9px;padding-bottom:7px;}}
+QPushButton:checked{{background:{soft};border:2px solid {accent};color:#142B4A;}}
+QPushButton:disabled{{background:#F1F4F8;color:#A0AABA;border-color:#E3E8EF;}}
+QToolButton{{background:transparent;color:#23334D;border:1px solid transparent;border-radius:9px;padding:7px;}}
+QToolButton:hover{{background:{soft};border-color:#D7E5F8;}}
+QToolButton:checked{{background:{soft};border:1px solid {accent};}}
+QSpinBox,QLineEdit,QComboBox{{background:#FFFFFF;color:#182338;border:1px solid #D5DFEC;border-radius:10px;padding:8px 10px;selection-background-color:{accent};selection-color:white;min-height:20px;}}
+QLineEdit:focus,QComboBox:focus,QSpinBox:focus{{border:2px solid {accent};background:#FFFFFF;}}
+QComboBox::drop-down{{border:none;width:24px;}}
+QMenu{{background:#FFFFFF;color:#182338;border:1px solid #D5DFEC;border-radius:12px;padding:6px;}}
+QMenu::item{{padding:9px 16px;border-radius:7px;}}
+QMenu::item:selected{{background:{soft};color:#142B4A;}}
+QCheckBox{{color:#23334D;spacing:9px;padding:6px;}}
+QCheckBox::indicator{{width:17px;height:17px;border-radius:5px;border:1px solid #9BAAC0;background:#FFFFFF;}}
 QCheckBox::indicator:checked{{background:{accent};border-color:{accent};}}
-QGroupBox{{border:1px solid #DADAE0;border-radius:16px;margin-top:14px;padding-top:12px;background:rgba(255,255,255,.65);}}
-QGroupBox::title{{subcontrol-origin:margin;left:14px;padding:0 6px;color:#4B4B54;font-weight:800;}}
-QSlider::groove:horizontal{{height:6px;background:#DFDFE5;border-radius:3px;}}
-QSlider::handle:horizontal{{width:20px;height:20px;margin:-7px 0;border-radius:10px;background:{accent};border:3px solid white;}}
+QGroupBox{{border:1px solid #DCE5F0;border-radius:13px;margin-top:14px;padding:14px 10px 10px;background:rgba(255,255,255,0.72);font-weight:600;}}
+QGroupBox::title{{subcontrol-origin:margin;left:14px;padding:0 6px;color:#50617A;font-weight:700;}}
+QTabWidget::pane{{border:1px solid #DCE5F0;border-radius:12px;background:#FFFFFF;top:-1px;}}
+QTabBar::tab{{background:#F2F6FB;color:#52627A;border:1px solid #E0E7F0;padding:9px 15px;margin-right:4px;border-top-left-radius:8px;border-top-right-radius:8px;}}
+QTabBar::tab:selected{{background:#FFFFFF;color:{accent};border-bottom:2px solid {accent};font-weight:700;}}
+QSlider::groove:horizontal{{height:6px;background:#E2E9F2;border-radius:3px;}}
+QSlider::handle:horizontal{{width:18px;height:18px;margin:-6px 0;border-radius:9px;background:{accent};border:3px solid white;}}
 QScrollBar:vertical{{width:10px;background:transparent;margin:4px;}}
-QScrollBar::handle:vertical{{background:#C8C8D0;border-radius:5px;min-height:30px;}}'''
+QScrollBar::handle:vertical{{background:#C9D4E2;border-radius:5px;min-height:30px;}}
+QScrollBar::handle:vertical:hover{{background:#9EADC2;}}
+QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0;}}
+QToolTip{{background:#172B49;color:#FFFFFF;border:1px solid #334B6D;border-radius:6px;padding:5px 8px;}}'''
 
 COLOR_THEMES = {name: _build_light_theme(accent, soft, surface) for name, _, accent, soft, surface in THEME_DEFINITIONS}
 THEME_ACCENTS = {name: tuple(int(accent[i:i+2],16) for i in (1,3,5)) for name,_,accent,_,_ in THEME_DEFINITIONS}
@@ -696,16 +710,19 @@ class ParinPDFViewer(QMainWindow):
         self.settings_store.setValue('settings',str(self.app_settings))
         for k,v in self.app_settings.items(): self.settings_store.setValue(k,v)
         base=self._style_for_theme(); accent=THEME_ACCENTS.get(self.app_settings.get('theme','Arctic Glass'),(58,141,255)); ah='#%02X%02X%02X'%accent
-        common=f'''QWidget#app_header{{background:rgba(255,255,255,.90);border-bottom:1px solid #E1E1E6;}}
-QLabel#brand_title{{font-size:21px;font-weight:900;color:#1B1B1F;}}
-QLabel#brand_subtitle{{font-size:11px;color:#66666F;}}
-QFrame#tool_area{{background:rgba(246,249,253,.98);border-bottom:1px solid #DDE5EF;}}
-QFrame#tool_group{{background:rgba(255,255,255,.96);border:1px solid #D7E0EB;border-radius:18px;}}
-QLabel#group_label{{font-size:9px;font-weight:900;color:#707079;padding:0 5px;}}
+        common=f'''QWidget#app_header{{background:rgba(255,255,255,0.96);border-bottom:1px solid #E1E9F3;}}
+QLabel#brand_title{{font-size:21px;font-weight:800;color:#172B49;}}
+QLabel#brand_subtitle{{font-size:10px;color:#6B7B92;}}
+QFrame#tool_area{{background:rgba(244,248,253,0.98);border-bottom:1px solid #E1E9F3;}}
+QFrame#tool_group{{background:rgba(255,255,255,0.98);border:1px solid #DCE5F0;border-radius:13px;}}
+QLabel#group_label{{font-size:9px;font-weight:800;color:#74839A;padding:0 6px;letter-spacing:0.5px;}}
 QLineEdit#quick_search,QLineEdit{{min-height:38px;}}
-QStatusBar{{background:rgba(255,255,255,.94);color:#62626B;border-top:1px solid #E1E1E6;}}
+QStatusBar{{background:rgba(255,255,255,0.96);color:#65758C;border-top:1px solid #E1E9F3;}}
 QPushButton:hover{{border-color:{ah};}}
 QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
+QFrame#page_canvas{{background:#EAF0F7;border:1px solid #D8E2EF;border-radius:16px;}}
+QScrollArea#document_scroll{{background:transparent;border:none;}}
+QDialog{{background:#F8FAFD;}}
 '''
         self.setStyleSheet(base+common)
         self.statusBar().setVisible(bool(self.app_settings.get('status_bar',True)))
