@@ -815,37 +815,68 @@ class ParinPDFViewer(QMainWindow):
         return _theme_stylesheet(self.app_settings.get('theme','Arctic Glass'), self.app_settings.get('appearance_mode','light'))
     def apply_app_settings(self):
         self.settings_store.setValue('settings',str(self.app_settings))
-        for k,v in self.app_settings.items(): self.settings_store.setValue(k,v)
-        base=self._style_for_theme(); accent=THEME_ACCENTS.get(self.app_settings.get('theme','Arctic Glass'),(58,141,255)); ah='#%02X%02X%02X'%accent
-        common=f'''QWidget#app_header{{background:#10243F;border-bottom:1px solid #1C3B60;}}
+        for k,v in self.app_settings.items():
+            self.settings_store.setValue(k,v)
+        dark = str(self.app_settings.get("appearance_mode","light")).lower() == "dark"
+        base = self._style_for_theme()
+        accent = THEME_ACCENTS.get(self.app_settings.get('theme','Arctic Glass'),(58,141,255))
+        ah = '#%02X%02X%02X' % accent
+        header_bg = "#0B1423" if dark else "#10243F"
+        header_border = "#23354D" if dark else "#1C3B60"
+        tool_bg = "#131F30" if dark else "#EEF3F9"
+        panel_bg = "#182539" if dark else "#FFFFFF"
+        border = "#2C405B" if dark else "#D9E3EF"
+        muted = "#A8B7CA" if dark else "#73839A"
+        canvas = "#0D1522" if dark else "#EDF2F8"
+        search_bg = "#111B2A" if dark else "#F8FAFD"
+        status_bg = "#111B2A" if dark else "#FFFFFF"
+        dialog_bg = "#101827" if dark else "#F8FAFD"
+        title_fg = "#F4F7FC" if dark else "#243650"
+        common=f'''QWidget#app_header{{background:{header_bg};border-bottom:1px solid {header_border};}}
 QLabel#brand_title{{font-size:22px;font-weight:800;color:#FFFFFF;letter-spacing:0.2px;}}
 QLabel#brand_subtitle{{font-size:10px;color:#B8C7DA;}}
-QFrame#tool_area{{background:#EEF3F9;border-bottom:1px solid #DCE5EF;}}
-QFrame#tool_group{{background:#FFFFFF;border:1px solid #D9E3EF;border-radius:13px;}}
-QLabel#group_label{{font-size:9px;font-weight:800;color:#73839A;padding:0 6px;letter-spacing:0.6px;}}
-QLineEdit#quick_search{{min-height:38px;background:#F8FAFD;color:#172B49;border:1px solid #D4DFED;border-radius:11px;padding:7px 12px;selection-background-color:{ah};selection-color:#FFFFFF;}}
-QLineEdit#quick_search:focus{{background:#FFFFFF;border:2px solid {ah};}}
-QStatusBar{{background:#FFFFFF;color:#65758C;border-top:1px solid #DCE5EF;}}
+QFrame#tool_area{{background:{tool_bg};border-bottom:1px solid {border};}}
+QFrame#tool_group{{background:{panel_bg};border:1px solid {border};border-radius:13px;}}
+QLabel#group_label{{font-size:9px;font-weight:800;color:{muted};padding:0 6px;letter-spacing:0.6px;}}
+QLineEdit#quick_search{{min-height:38px;background:{search_bg};color:{'#E5EDF7' if dark else '#172B49'};border:1px solid {border};border-radius:11px;padding:7px 12px;selection-background-color:{ah};selection-color:#FFFFFF;}}
+QLineEdit#quick_search:focus{{background:{panel_bg};border:2px solid {ah};}}
+QStatusBar{{background:{status_bg};color:{muted};border-top:1px solid {border};}}
 QStatusBar::item{{border:none;}}
+QLabel#status_page,QLabel#status_zoom,QLabel#status_dirty{{color:{muted};padding:2px 8px;font-size:9pt;}}
+QLabel#status_dirty[dirty="true"]{{color:{'#FFB4A9' if dark else '#B5473C'};font-weight:700;}}
 QPushButton:hover{{border-color:{ah};}}
 QPushButton:checked{{background:{soft_tone(ah)};border:2px solid {ah};}}
 QFrame#app_header QPushButton{{background:rgba(255,255,255,0.08);color:#F5F8FC;border:1px solid #35506F;border-radius:10px;padding:8px 12px;font-weight:600;}}
 QFrame#app_header QPushButton:hover{{background:#23466F;border-color:{ah};}}
 QFrame#app_header QPushButton:pressed{{background:#1B395E;border-color:{ah};}}
 QFrame#app_header QPushButton:disabled{{background:rgba(255,255,255,0.04);color:#71849D;border-color:#2A405B;}}
-QFrame#page_canvas{{background:#EDF2F8;border:1px solid #D8E2EF;border-radius:16px;}}
-QScrollArea#document_scroll{{background:#EDF2F8;border:none;}}
-QScrollArea#document_scroll QWidget#qt_scrollarea_viewport{{background:#EDF2F8;border:none;}}
-QScrollArea#document_scroll QLabel{{background:transparent;}}
-QDockWidget{{color:#23334D;font-weight:700;}}
-QDockWidget::title{{background:#F5F8FC;padding:9px 12px;border-bottom:1px solid #DCE5EF;}}
-QDialog{{background:#F8FAFD;}}
+QFrame#page_canvas{{background:{canvas};border:1px solid {border};border-radius:16px;}}
+QScrollArea#document_scroll{{background:{canvas};border:none;}}
+QScrollArea#document_scroll QWidget#qt_scrollarea_viewport{{background:{canvas};border:none;}}
+QScrollArea#document_scroll QLabel#pdf_page{{background:transparent;}}
+QWidget#welcome_page{{background:{canvas};}}
+QFrame#welcome_hero{{background:{panel_bg};border:1px solid {border};border-radius:22px;}}
+QLabel#welcome_title{{font-size:27px;font-weight:800;color:{title_fg};}}
+QLabel#welcome_subtitle{{font-size:12px;color:{muted};}}
+QLabel#welcome_section_title{{font-size:17px;font-weight:800;color:{title_fg};}}
+QLabel#welcome_hint{{font-size:10pt;color:{muted};}}
+QToolButton#recent_file_card{{background:{panel_bg};color:{'#E5EDF7' if dark else '#23334D'};border:1px solid {border};border-radius:14px;padding:12px;font-weight:600;text-align:center;}}
+QToolButton#recent_file_card:hover{{background:{'#203650' if dark else '#F4F8FD'};border:1px solid {ah};}}
+QToolButton#recent_file_card:pressed{{background:{'#253D5B' if dark else '#EAF2FC'};}}
+QPushButton#welcome_clear_button{{background:transparent;color:{ah};border:1px solid transparent;padding:6px 10px;}}
+QPushButton#welcome_clear_button:hover{{background:{tool_bg};border-color:{border};}}
+QPushButton#welcome_open_button{{background:{ah};color:#FFFFFF;border:1px solid {ah};border-radius:12px;padding:10px 16px;font-weight:700;}}
+QPushButton#welcome_open_button:hover{{background:{ah};border-color:{ah};}}
+QLabel#welcome_empty{{color:{muted};padding:20px;border:1px dashed {border};border-radius:12px;}}
+QDockWidget{{color:{'#E5EDF7' if dark else '#23334D'};font-weight:700;}}
+QDockWidget::title{{background:{tool_bg};padding:9px 12px;border-bottom:1px solid {border};}}
+QDialog{{background:{dialog_bg};}}
 '''
-        self.setStyleSheet(base+common)
+        self.setStyleSheet(base+common)        self.setStyleSheet(base+common)
         self.statusBar().setVisible(bool(self.app_settings.get('status_bar',True)))
         self.audio_output.setVolume(max(0,min(100,int(self.app_settings.get('volume',50))))/100)
         compact=bool(self.app_settings.get('compact_toolbar',False)); large=bool(self.app_settings.get('large_toolbar',True))
-        names=['btn_open','btn_save','btn_print_opt','btn_pen','btn_highlight','btn_eraser','btn_add_text','btn_color','btn_fit_width','btn_fit_page','btn_reset_zoom','btn_prev','btn_next','btn_rotate_left','btn_rotate_right','btn_fullscreen','btn_lofi','btn_more','btn_settings','btn_lang']
+        names=['btn_open','btn_save','btn_print_opt','btn_pen','btn_highlight','btn_eraser','btn_add_text','btn_color','btn_fit_width','btn_fit_page','btn_reset_zoom','btn_prev','btn_next','btn_rotate_left','btn_rotate_right','btn_fullscreen','btn_lofi','btn_more','btn_navigation','btn_settings','btn_lang']
         for b in [getattr(self,n,None) for n in names]:
             if b:
                 b.setMinimumHeight(32 if compact else (44 if large else 38)); b.setIconSize(QSize(24,24))
@@ -868,7 +899,8 @@ QDialog{{background:#F8FAFD;}}
         self.app_icon=QLabel(); self.app_icon.setPixmap(make_app_icon(46).pixmap(46,46)); hl.addWidget(self.app_icon)
         brand=QVBoxLayout(); self.brand_title=QLabel("Parin"); self.brand_title.setObjectName("brand_title"); self.brand_subtitle=QLabel("Fast • Focused • PDF workspace"); self.brand_subtitle.setObjectName("brand_subtitle"); brand.addWidget(self.brand_title); brand.addWidget(self.brand_subtitle); hl.addLayout(brand)
         hl.addStretch()
-        self.quick_search=QLineEdit(); self.quick_search.setPlaceholderText("Search inside PDF…"); self.quick_search.setClearButtonEnabled(True); self.quick_search.setMinimumWidth(280); self.quick_search.returnPressed.connect(self.search_from_bar); hl.addWidget(self.quick_search)
+        self.quick_search=QLineEdit(); self.quick_search.setObjectName("quick_search"); self.quick_search.setPlaceholderText("Search inside PDF…"); self.quick_search.setClearButtonEnabled(True); self.quick_search.setMinimumWidth(220); self.quick_search.returnPressed.connect(self.search_from_bar); hl.addWidget(self.quick_search)
+        self.btn_navigation=self.create_btn("Pages", self.toggle_navigation_panel, icon_key="More"); self.btn_navigation.setMinimumWidth(72); self.btn_navigation.setToolTip("Toggle the navigation panel"); hl.addWidget(self.btn_navigation)
         self.btn_settings=self.create_btn("Settings", self.open_settings, icon_key="Settings"); hl.addWidget(self.btn_settings)
         self.btn_lang=self.create_btn("Language", None, icon_key="Language"); hl.addWidget(self.btn_lang)
         lang_menu = QMenu(self)
@@ -934,8 +966,33 @@ QDialog{{background:#F8FAFD;}}
         self.btn_more.setMenu(more); row2.addWidget(self.btn_more); row2.addStretch(); tl.addLayout(row2)
         self.main_layout.addWidget(self.tool_area)
 
-        self.scroll_area=QScrollArea(self); self.scroll_area.setWidgetResizable(True); self.scroll_area.setAlignment(Qt.AlignCenter); self.page_label=PDFPageLabel(self); self.scroll_area.setWidget(self.page_label); self.main_layout.addWidget(self.scroll_area,1); self.blue_overlay=QFrame(self.scroll_area.viewport()); self.blue_overlay.setAttribute(Qt.WA_TransparentForMouseEvents,True); self.blue_overlay.setGeometry(self.scroll_area.viewport().rect()); self.blue_overlay.hide(); self.blue_overlay.raise_()
+        self.workspace_stack=QStackedWidget(self)
+        self.welcome_page=QWidget()
+        self._build_welcome_page()
+        self.scroll_area=QScrollArea(self)
+        self.scroll_area.setObjectName("document_scroll")
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        self.scroll_area.setAlignment(Qt.AlignCenter)
+        self.page_label=PDFPageLabel(self)
+        self.page_label.setObjectName("pdf_page")
+        self.scroll_area.setWidget(self.page_label)
+        self.workspace_stack.addWidget(self.welcome_page)
+        self.workspace_stack.addWidget(self.scroll_area)
+        self.workspace_stack.setCurrentWidget(self.welcome_page)
+        self.main_layout.addWidget(self.workspace_stack,1)
+        self.blue_overlay=QFrame(self.scroll_area.viewport())
+        self.blue_overlay.setAttribute(Qt.WA_TransparentForMouseEvents,True)
+        self.blue_overlay.setGeometry(self.scroll_area.viewport().rect())
+        self.blue_overlay.hide()
+        self.blue_overlay.raise_()
         self.statusBar().showMessage("Ready • Open a PDF to begin")
+        self.status_page=QLabel("No PDF open"); self.status_page.setObjectName("status_page")
+        self.status_zoom=QLabel("100%"); self.status_zoom.setObjectName("status_zoom")
+        self.status_dirty=QLabel("Ready"); self.status_dirty.setObjectName("status_dirty")
+        self.statusBar().addPermanentWidget(self.status_page)
+        self.statusBar().addPermanentWidget(self.status_zoom)
+        self.statusBar().addPermanentWidget(self.status_dirty)
         self.setWindowIcon(make_app_icon(64))
         self._build_navigation_dock()
 
