@@ -35,7 +35,7 @@ jobs:
           python -m pip install "maturin>=1.7,<2.0"
           maturin build --release --manifest-path rust-core/Cargo.toml --out /tmp/parin-rust-wheelhouse
           python -m pip install /tmp/parin-rust-wheelhouse/*.whl
-          cargo test --manifest-path rust-core/Cargo.toml
+          cargo test --no-default-features --manifest-path rust-core/Cargo.toml
       - name: Compile source and tests
         run: python -m compileall -q src tests
       - name: Run regression tests
