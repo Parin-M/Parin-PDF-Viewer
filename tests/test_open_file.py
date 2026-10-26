@@ -116,7 +116,7 @@ class PdfOpenRegressionTests(unittest.TestCase):
             for index in range(3):
                 page = document.new_page(width=595, height=1200)
                 page.insert_text((72, 90), f"Visible content on page {index + 1}", fontsize=24)
-                page.draw_rect(fitz.Rect(60, 120, 500, 1100), color=(0, 0.4, 0.8), width=3)
+                page.draw_rect(fitz.Rect(60, 120, 500, 1100), color=(0, 0.4, 0.8), fill=(0, 0.4, 0.8), width=3)
             document.save(str(path))
             document.close()
 
@@ -153,6 +153,22 @@ class PdfOpenRegressionTests(unittest.TestCase):
                     self.assertEqual(viewer.current_page, 1)
                     self.assertFalse(viewer.page_label.pixmap().isNull())
                     self.assertLess(bar.value(), bar.maximum(), "the next page should continue from its top")
+
+                    # Wheel events on the viewport (for example, over page margins)
+                    # must use the same page-transition logic as events on the label.
+                    bar.setValue(bar.maximum())
+                    event = QWheelEvent(
+                        QPointF(4, 4), QPointF(4, 4), QPoint(0, 0), QPoint(0, -120),
+                        Qt.NoButton, Qt.NoModifier, Qt.ScrollPhase.ScrollUpdate, False,
+                    )
+                    self.app.sendEvent(viewer.scroll_area.viewport(), event)
+                    for _ in range(5):
+                        self.app.processEvents()
+                    self.assertEqual(viewer.current_page, 2, "viewport wheel must advance the page")
+                    self.assertFalse(viewer.page_label.pixmap().isNull())
+                    image = viewer.scroll_area.viewport().grab().toImage()
+                    sample = image.pixelColor(image.width() // 2, image.height() // 2)
+                    self.assertGreater(sample.blue(), sample.red() + 30, "rendered page content must remain visible after viewport scrolling")
                 finally:
                     viewer.close()
                     self.app.processEvents()

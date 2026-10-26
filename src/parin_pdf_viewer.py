@@ -6,7 +6,7 @@ import tempfile
 from collections import OrderedDict
 from pathlib import Path
 import pymupdf as fitz  # PyMuPDF (modern API; avoids deprecated fitz import)
-from PySide6.QtCore import Qt, QUrl, QPoint, QPointF, QRectF, QTimer, QSettings, Signal, QSize, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QUrl, QPoint, QPointF, QRectF, QTimer, QSettings, Signal, QSize, QPropertyAnimation, QEasingCurve, QEvent
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QLineEdit, QScrollArea, 
@@ -171,6 +171,26 @@ def make_action_icon(symbol,size=20,accent=(53,111,216)):
     painter.end()
     return QIcon(pm)
 
+class PDFScrollArea(QScrollArea):
+    """Route wheel events from both the viewport and the page widget consistently."""
+    def __init__(self, viewer_instance, parent=None):
+        super().__init__(parent)
+        self.viewer = viewer_instance
+
+    def wheelEvent(self, event):
+        if self.viewer.handle_pdf_wheel(event):
+            return
+        super().wheelEvent(event)
+
+    def viewportEvent(self, event):
+        # QAbstractScrollArea routes viewport input through viewportEvent.
+        # Intercepting here prevents the native scrollbar moving without the
+        # page-transition logic being notified.
+        if event.type() == QEvent.Wheel and self.viewer.handle_pdf_wheel(event):
+            return True
+        return super().viewportEvent(event)
+
+
 class PDFPageLabel(QLabel):
     """PDF canvas with low-latency live preview for ink annotations."""
     def __init__(self, viewer_instance):
@@ -182,53 +202,10 @@ class PDFPageLabel(QLabel):
         self.setMouseTracking(True)
 
     def wheelEvent(self, event):
-        """Scroll the PDF canvas directly and carry movement across page edges."""
-        viewer = self.viewer
-        if not viewer.doc or not hasattr(viewer, "scroll_area"):
-            super().wheelEvent(event)
+        # Page image and viewport-margin wheel events share one implementation.
+        if self.viewer.handle_pdf_wheel(event):
             return
-
-        pixel_delta = event.pixelDelta().y()
-        angle_delta = event.angleDelta().y()
-        if event.modifiers() & Qt.ControlModifier:
-            direction = pixel_delta if pixel_delta else angle_delta
-            if direction > 0:
-                viewer.zoom_in()
-            elif direction < 0:
-                viewer.zoom_out()
-            event.accept()
-            return
-
-        bar = viewer.scroll_area.verticalScrollBar()
-        # Mouse wheels use angleDelta; touchpads can provide pixelDelta.
-        if pixel_delta:
-            movement = -pixel_delta
-        elif angle_delta:
-            movement = -round((angle_delta / 120.0) * max(24, bar.singleStep()) * 3)
-        else:
-            super().wheelEvent(event)
-            return
-
-        target = bar.value() + movement
-        if target < bar.minimum() and viewer.current_page > 0:
-            overflow = bar.minimum() - target
-            viewer.prev_page()
-            QTimer.singleShot(
-                0,
-                lambda amount=overflow, scroll_bar=bar:
-                    scroll_bar.setValue(max(scroll_bar.minimum(), scroll_bar.maximum() - amount)),
-            )
-        elif target > bar.maximum() and viewer.current_page < viewer.doc.page_count - 1:
-            overflow = target - bar.maximum()
-            viewer.next_page()
-            QTimer.singleShot(
-                0,
-                lambda amount=overflow, scroll_bar=bar:
-                    scroll_bar.setValue(min(scroll_bar.maximum(), scroll_bar.minimum() + amount)),
-            )
-        else:
-            bar.setValue(max(bar.minimum(), min(bar.maximum(), target)))
-        event.accept()
+        super().wheelEvent(event)
 
     def _preview_points(self):
         points = [(point.x(), point.y()) for point in self.current_stroke_view]
@@ -841,6 +818,7 @@ class ParinPDFViewer(QMainWindow):
         self.render_pending = False
         self._last_viewport_size = None
         self._open_render_generation = 0
+        self._wheel_transition_generation = 0
         self.is_drawing = False
         self.large_file_mode = False
 
@@ -1115,7 +1093,7 @@ QDialog{{background:{dialog_bg};}}
         self.workspace_stack=QStackedWidget(self)
         self.welcome_page=QWidget()
         self._build_welcome_page()
-        self.scroll_area=QScrollArea(self)
+        self.scroll_area=PDFScrollArea(self, self)
         self.scroll_area.setObjectName("document_scroll")
         # The PDF canvas must keep its rendered pixel size. With widgetResizable
         # enabled, QScrollArea can resize the QLabel independently of its pixmap;
@@ -2124,14 +2102,82 @@ QDialog{{background:{dialog_bg};}}
             self.mark_document_modified()
             self.render_page()
 
-    def wheelEvent(self, event):
-        if event.modifiers() == Qt.ControlModifier:
-            if event.angleDelta().y() > 0:
+    def handle_pdf_wheel(self, event):
+        """Handle wheel movement for labels, viewport margins and the scroll area."""
+        if not self.doc or not hasattr(self, "scroll_area"):
+            return False
+
+        pixel_delta = event.pixelDelta().y()
+        angle_delta = event.angleDelta().y()
+        direction = pixel_delta if pixel_delta else angle_delta
+        if event.modifiers() & Qt.ControlModifier:
+            if direction > 0:
                 self.zoom_in()
-            else:
+            elif direction < 0:
                 self.zoom_out()
+            event.accept()
+            return True
+
+        if not pixel_delta and not angle_delta:
+            return False
+
+        bar = self.scroll_area.verticalScrollBar()
+        # A negative Qt wheel delta means the user is scrolling down.
+        if pixel_delta:
+            movement = -pixel_delta
         else:
-            super().wheelEvent(event)
+            movement = -round((angle_delta / 120.0) * max(24, bar.singleStep()) * 3)
+
+        target = bar.value() + movement
+        if target < bar.minimum() and self.current_page > 0:
+            overflow = bar.minimum() - target
+            self._change_page_from_wheel(self.current_page - 1, overflow, "bottom")
+        elif target > bar.maximum() and self.current_page < self.doc.page_count - 1:
+            overflow = target - bar.maximum()
+            self._change_page_from_wheel(self.current_page + 1, overflow, "top")
+        else:
+            bar.setValue(max(bar.minimum(), min(bar.maximum(), target)))
+        event.accept()
+        return True
+
+    def _change_page_from_wheel(self, page_index, overflow, edge):
+        """Change pages once and restore the scroll offset after Qt updates its range."""
+        if not self.doc or not 0 <= page_index < self.doc.page_count:
+            return
+        self._wheel_transition_generation += 1
+        generation = self._wheel_transition_generation
+        self.current_page = page_index
+        self.spin_page.blockSignals(True)
+        self.spin_page.setValue(page_index + 1)
+        self.spin_page.blockSignals(False)
+        if self._last_search_page != page_index:
+            self.search_highlight = None
+        self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
+
+        def restore_after_layout():
+            if generation != self._wheel_transition_generation or not self.doc:
+                return
+            self.scroll_area.ensurePolished()
+            scroll_bar = self.scroll_area.verticalScrollBar()
+            value = scroll_bar.maximum() - overflow if edge == "bottom" else scroll_bar.minimum() + overflow
+            scroll_bar.setValue(max(scroll_bar.minimum(), min(scroll_bar.maximum(), value)))
+            # Give pending layout/resize events another turn, then clamp to the
+            # final scrollbar range to avoid landing in a stale blank region.
+            QTimer.singleShot(0, finalize_after_layout)
+
+        def finalize_after_layout():
+            if generation != self._wheel_transition_generation or not self.doc:
+                return
+            scroll_bar = self.scroll_area.verticalScrollBar()
+            value = scroll_bar.maximum() - overflow if edge == "bottom" else scroll_bar.minimum() + overflow
+            scroll_bar.setValue(max(scroll_bar.minimum(), min(scroll_bar.maximum(), value)))
+
+        QTimer.singleShot(0, restore_after_layout)
+
+    def wheelEvent(self, event):
+        if self.handle_pdf_wheel(event):
+            return
+        super().wheelEvent(event)
 
     def toggle_lofi(self):
         if self.is_lofi_playing:

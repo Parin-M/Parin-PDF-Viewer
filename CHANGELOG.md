@@ -1,5 +1,12 @@
 # Changelog
 
+## 9.1.3 — Fix wheel routing and stale scroll ranges
+
+- Handle wheel input centrally for the page label, the scroll area's own surface, and its viewport, including blank margins around fitted pages.
+- Recalculate the target scroll offset after page changes and scrollbar range updates, with a generation guard that prevents stale delayed callbacks from moving a newer page.
+- Add a regression assertion that scrolling over the viewport advances to the next page and keeps real rendered page pixels visible.
+- Bump application, native-core, Debian package, and workflow artifact versions to 9.1.3.
+
 ## 9.1.2 — PDF scrolling and page transitions
 
 - Handle mouse-wheel and touchpad scrolling directly on the PDF canvas, including Ctrl+wheel zoom.
