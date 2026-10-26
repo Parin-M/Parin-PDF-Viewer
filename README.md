@@ -7,6 +7,7 @@ This branch contains development work for the next Parin PDF Viewer iteration. I
 ### What is changing in 9.1
 
 - Everything from `feature/v9.0`, including page organization, undo/redo, safer loading/saving, navigation, search, recent files, session restoration, and full-document printing.
+- Refresh the Qt interface styling with a consistent blue-gray palette, refined controls, tabs, menus, tooltips, and focus states.
 - Add a Rust native extension (PyO3) for defensive zoom normalization, with the existing Python fallback retained when the extension is unavailable.
 - A localized About page under Settings, with the exact project credit, application version, GitHub repository, GPL-3.0 license, and a copy-version button.
 - A drag-and-drop page organizer to reorder, rotate, delete, and extract pages, plus insertion from another PDF.
