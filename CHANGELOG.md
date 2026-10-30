@@ -1,5 +1,14 @@
 # Changelog
 
+## 9.2.0 — Python-only core and interface refresh
+
+- Remove the PyO3/Rust extension and the entire `rust-core` project; all runtime helpers are implemented directly in Python.
+- Remove Rust setup, Cargo tests and maturin build/install steps from CI and Debian packaging.
+- Refresh the interface with a consistent surface system, more legible typography, refined spacing, clearer button states and improved light/dark contrast.
+- Refine toolbar density, primary actions, page-navigation controls, recent-document cards and responsive welcome layout.
+- Expand regression coverage for the pure-Python zoom helper and key interface styling.
+
+
 ## 9.1.4 — Full audit fixes
 
 - Preserve encryption for PDFs with an empty user password, validate temporary output before replacing the open file, and keep the previous document usable when saving fails.

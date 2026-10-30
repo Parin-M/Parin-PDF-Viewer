@@ -135,6 +135,23 @@ class InterfaceThemeTests(unittest.TestCase):
                     viewer.close()
                     self.app.processEvents()
 
+    def test_workspace_uses_consistent_surface_and_action_styles(self):
+        with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+            viewer = ParinPDFViewer()
+            try:
+                stylesheet = viewer.styleSheet()
+                self.assertEqual(viewer.btn_open.objectName(), "primary_action")
+                self.assertEqual(viewer.btn_save.objectName(), "secondary_action")
+                self.assertIn("QFrame#tool_group", stylesheet)
+                self.assertIn("QFrame#welcome_hero", stylesheet)
+                self.assertIn("QToolButton#recent_file_card", stylesheet)
+                self.assertIn("QPushButton#primary_action", stylesheet)
+                self.assertIn("QListWidget::item:selected", stylesheet)
+                self.assertIsNotNone(viewer._welcome_refresh_timer)
+            finally:
+                viewer.close()
+                self.app.processEvents()
+
     def test_text_font_size_and_smart_ink_controls(self):
         with patch("parin_pdf_viewer.QSettings", _MemorySettings):
             viewer = ParinPDFViewer()

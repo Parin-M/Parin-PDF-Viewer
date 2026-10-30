@@ -6,15 +6,8 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
-APP_VERSION = "9.1.4"
+APP_VERSION = "9.2.0"
 RECENT_FILES_LIMIT = 10
-
-# Prefer the native Rust implementation when installed; source checkouts retain a Python fallback.
-try:
-    from _parin_rust_core import clamp_zoom as _rust_clamp_zoom
-except ImportError:
-    _rust_clamp_zoom = None
-
 
 def normalize_recent_files(paths: object, limit: int = RECENT_FILES_LIMIT) -> list[str]:
     """Return absolute, unique recent paths in most-recent-first order."""
@@ -70,12 +63,7 @@ def same_path(first: str | os.PathLike[str], second: str | os.PathLike[str]) -> 
 
 
 def clamp_zoom(value: float, minimum: float = 0.1, maximum: float = 8.0) -> float:
-    """Clamp zoom using Rust when available, with defensive Python fallback."""
-    if _rust_clamp_zoom is not None:
-        try:
-            return float(_rust_clamp_zoom(value, minimum, maximum))
-        except (TypeError, ValueError, OverflowError):
-            pass
+    """Clamp zoom safely using the pure-Python implementation."""
     try:
         lower = float(minimum)
         upper = float(maximum)
@@ -83,6 +71,7 @@ def clamp_zoom(value: float, minimum: float = 0.1, maximum: float = 8.0) -> floa
         raise ValueError("Invalid zoom bounds.") from None
     if not math.isfinite(lower) or not math.isfinite(upper) or lower <= 0 or upper < lower:
         raise ValueError("Invalid zoom bounds.")
+
     try:
         zoom = float(value)
     except (TypeError, ValueError, OverflowError):

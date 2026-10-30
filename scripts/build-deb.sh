@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-VERSION="9.1.4"
+VERSION="9.2.0"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -15,9 +15,6 @@ source .venv/bin/activate
 
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python -m pip install "maturin>=1.7,<2.0"
-maturin develop --release --manifest-path rust-core/Cargo.toml
-
 rm -rf build dist dist-deb package
 mkdir -p dist-deb package/usr/lib/parin-pdf package/usr/bin \
          package/usr/share/applications \

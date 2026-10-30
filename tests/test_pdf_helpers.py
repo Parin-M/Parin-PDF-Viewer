@@ -3,11 +3,6 @@ import unittest
 from pathlib import Path
 
 
-try:
-    import _parin_rust_core
-except ImportError:
-    _parin_rust_core = None
-
 from parin_pdf_helpers import (
     APP_VERSION,
     add_recent_file,
@@ -64,16 +59,23 @@ class ZoomTests(unittest.TestCase):
         self.assertEqual(clamp_zoom(float("nan")), 1.0)
         self.assertEqual(clamp_zoom(float("inf")), 1.0)
 
+    def test_non_finite_zoom_uses_a_default_inside_custom_bounds(self):
+        self.assertEqual(clamp_zoom(float("nan"), 2.0, 4.0), 2.0)
+        self.assertEqual(clamp_zoom(float("inf"), 0.1, 0.4), 0.4)
+
+    def test_invalid_bounds_are_rejected_even_for_non_finite_zoom(self):
+        with self.assertRaises(ValueError):
+            clamp_zoom(float("nan"), 0.0, 4.0)
+
+    def test_zoom_helper_is_pure_python(self):
+        import inspect
+        self.assertNotIn("_parin_rust_core", inspect.getsource(clamp_zoom))
+
 
 class VersionTests(unittest.TestCase):
-    def test_version_is_914(self):
-        self.assertEqual(APP_VERSION, "9.1.4")
+    def test_version_is_920(self):
+        self.assertEqual(APP_VERSION, "9.2.0")
 
-
-@unittest.skipIf(_parin_rust_core is None, "native Rust extension is not installed")
-class NativeVersionTests(unittest.TestCase):
-    def test_native_extension_version_matches_application(self):
-        self.assertEqual(_parin_rust_core.__version__, APP_VERSION)
 
 
 if __name__ == "__main__":

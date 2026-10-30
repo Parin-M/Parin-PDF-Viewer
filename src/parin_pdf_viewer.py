@@ -232,7 +232,7 @@ class PDFPageLabel(QLabel):
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        if not self.viewer.doc:
+        if self.viewer.doc is None or getattr(self.viewer.doc, "is_closed", False):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -276,7 +276,7 @@ class PDFPageLabel(QLabel):
             painter.end()
 
     def mousePressEvent(self, event: QMouseEvent):
-        if not self.viewer.doc or not self.viewer.active_tool or event.button() != Qt.LeftButton:
+        if self.viewer.doc is None or getattr(self.viewer.doc, "is_closed", False) or not self.viewer.active_tool or event.button() != Qt.LeftButton:
             super().mousePressEvent(event)
             return
         pdf_pt = self.viewer.get_pdf_coords(event.position())
@@ -326,7 +326,7 @@ class PDFPageLabel(QLabel):
                 QMessageBox.warning(self.viewer, "Text annotation", str(exc))
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        if not self.viewer.doc or not self.viewer.active_tool:
+        if self.viewer.doc is None or getattr(self.viewer.doc, "is_closed", False) or not self.viewer.active_tool:
             super().mouseMoveEvent(event)
             return
         if self.viewer.active_tool in ("pen", "highlight") and self.viewer.is_drawing:
@@ -502,7 +502,7 @@ for _code, _label in {
 class SettingsDialog(QDialog):
     settings_changed=Signal(dict)
     def __init__(self,viewer):
-        super().__init__(viewer); self.viewer=viewer; self.settings=viewer.app_settings.copy(); self.lang=viewer.current_lang if viewer.current_lang in SETTINGS_I18N else 'en'; self.setMinimumSize(980,680); self.resize(1120,780); self.setModal(True); self._build_ui(); self._retranslate(); self._fade_in()
+        super().__init__(viewer); self.viewer=viewer; self.settings=viewer.app_settings.copy(); self.lang=viewer.current_lang if viewer.current_lang in SETTINGS_I18N else 'en'; self.setMinimumSize(920,640); self.resize(1100,760); self.setModal(True); self._build_ui(); self._retranslate(); self._fade_in()
     def _build_ui(self):
         root=QVBoxLayout(self); root.setContentsMargins(18,18,18,18); root.setSpacing(14)
         header=QFrame(); header.setObjectName('settingsHeader'); hl=QHBoxLayout(header); hl.setContentsMargins(20,16,20,16); ic=QLabel(); ic.setPixmap(make_app_icon(58).pixmap(58,58)); hl.addWidget(ic); tb=QVBoxLayout(); self.title=QLabel(); self.title.setObjectName('settingsTitle'); self.subtitle=QLabel(); self.subtitle.setObjectName('settingsSubtitle'); self.subtitle.setWordWrap(True); tb.addWidget(self.title); tb.addWidget(self.subtitle); hl.addLayout(tb,1); self.live_chip=QLabel(); self.live_chip.setObjectName('settingsChip'); hl.addWidget(self.live_chip); root.addWidget(header)
@@ -957,7 +957,7 @@ class ParinPDFViewer(QMainWindow):
         self.player.errorOccurred.connect(self._audio_error)
         self.is_lofi_playing = False
 
-        self.setMinimumSize(1150, 750)
+        self.setMinimumSize(1080, 700)
         self.setAcceptDrops(True)
         self.init_ui()
         self.apply_language(self.current_lang)
@@ -1004,45 +1004,79 @@ class ParinPDFViewer(QMainWindow):
         title_fg = "#F4F7FC" if dark else "#243650"
         active_fill = "#243D5B" if dark else soft_tone(ah)
         active_text = "#FFFFFF" if dark else "#142B4A"
-        common=f'''QWidget#app_header{{background:{header_bg};border-bottom:1px solid {header_border};}}
-QLabel#brand_title{{font-size:22px;font-weight:800;color:#FFFFFF;letter-spacing:0.2px;}}
+        surface = "#172338" if dark else "#FFFFFF"
+        raised = "#1E2E46" if dark else "#F7FAFE"
+        edge = "#314761" if dark else "#DCE5F0"
+        hero_top = "#1D3553" if dark else "#FFFFFF"
+        hero_bottom = "#14263E" if dark else "#F0F6FD"
+        text_main = "#EAF1FA" if dark else "#20324A"
+        text_muted = "#A8B8CC" if dark else "#718198"
+        header_end = "#142B48" if dark else "#1A3A62"
+        common=f'''QWidget{{font-family:"Inter","Noto Sans","Segoe UI",sans-serif;font-size:10pt;}}
+QMainWindow{{background:{canvas};}}
+QFrame#app_header{{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0:{header_bg},stop:1:{header_end});border-bottom:1px solid {header_border};}}
+QLabel#brand_title{{font-size:25px;font-weight:800;color:#FFFFFF;letter-spacing:0.4px;}}
 QLabel#brand_subtitle{{font-size:10px;color:#B8C7DA;}}
 QFrame#tool_area{{background:{tool_bg};border-bottom:1px solid {border};}}
-QFrame#tool_group{{background:{panel_bg};border:1px solid {border};border-radius:13px;}}
-QLabel#group_label{{font-size:9px;font-weight:800;color:{muted};padding:0 6px;letter-spacing:0.6px;}}
-QLineEdit#quick_search{{min-height:38px;background:{search_bg};color:{'#E5EDF7' if dark else '#172B49'};border:1px solid {border};border-radius:11px;padding:7px 12px;selection-background-color:{ah};selection-color:#FFFFFF;}}
-QLineEdit#quick_search:focus{{background:{panel_bg};border:2px solid {ah};}}
-QStatusBar{{background:{status_bg};color:{muted};border-top:1px solid {border};}}
-QStatusBar::item{{border:none;}}
-QLabel#status_page,QLabel#status_zoom,QLabel#status_dirty{{color:{muted};padding:2px 8px;font-size:9pt;}}
-QLabel#status_dirty[dirty="true"]{{color:{'#FFB4A9' if dark else '#B5473C'};font-weight:700;}}
-QPushButton:hover{{border-color:{ah};}}
-QPushButton:checked{{background:{active_fill};border:2px solid {ah};color:{active_text};}}
-QFrame#app_header QPushButton{{background:rgba(255,255,255,0.08);color:#F5F8FC;border:1px solid #35506F;border-radius:10px;padding:8px 12px;font-weight:600;}}
+QFrame#tool_group{{background:{panel_bg};border:1px solid {border};border-radius:15px;}}
+QLabel#group_label{{font-size:8px;font-weight:800;color:{muted};padding:0 7px;letter-spacing:1px;}}
+QPushButton{{background:{surface};color:{text_main};border:1px solid {edge};border-radius:10px;padding:7px 10px;min-height:30px;font-weight:600;}}
+QPushButton:hover{{background:{raised};border-color:{ah};}}
+QPushButton:pressed{{background:{active_fill};border-color:{ah};}}
+QPushButton:checked{{background:{active_fill};border:1px solid {ah};color:{active_text};}}
+QPushButton:disabled{{background:{tool_bg};color:{muted};border-color:{border};}}
+QPushButton:focus{{border:2px solid {ah};}}
+QPushButton#primary_action{{background:{ah};color:#FFFFFF;border:1px solid {ah};font-weight:750;padding:7px 13px;}}
+QPushButton#primary_action:hover{{background:{ah};border-color:{ah};}}
+QPushButton#secondary_action{{background:{soft_tone(ah) if not dark else '#203A59'};color:{active_text};border:1px solid {border};}}
+QPushButton#secondary_action:hover{{border-color:{ah};background:{active_fill};}}
+QFrame#app_header QPushButton{{background:rgba(255,255,255,0.08);color:#F5F8FC;border:1px solid #35506F;border-radius:11px;padding:8px 12px;font-weight:650;}}
 QFrame#app_header QPushButton:hover{{background:#23466F;border-color:{ah};}}
 QFrame#app_header QPushButton:pressed{{background:#1B395E;border-color:{ah};}}
 QFrame#app_header QPushButton:disabled{{background:rgba(255,255,255,0.04);color:#71849D;border-color:#2A405B;}}
-QFrame#page_canvas{{background:{canvas};border:1px solid {border};border-radius:16px;}}
+QLineEdit,QComboBox,QSpinBox{{background:{search_bg};color:{text_main};border:1px solid {border};border-radius:10px;padding:7px 10px;min-height:22px;selection-background-color:{ah};selection-color:#FFFFFF;}}
+QLineEdit:focus,QComboBox:focus,QSpinBox:focus{{background:{panel_bg};border:2px solid {ah};}}
+QComboBox::drop-down{{border:none;width:26px;}}
+QLineEdit#quick_search{{min-height:40px;background:{search_bg};color:{text_main};border:1px solid {border};border-radius:12px;padding:8px 13px;selection-background-color:{ah};selection-color:#FFFFFF;}}
+QLineEdit#quick_search:focus{{background:{panel_bg};border:2px solid {ah};}}
+QStatusBar{{background:{status_bg};color:{muted};border-top:1px solid {border};padding:3px 6px;}}
+QStatusBar::item{{border:none;}}
+QLabel#status_page,QLabel#status_zoom,QLabel#status_dirty{{color:{muted};padding:3px 9px;font-size:9pt;}}
+QLabel#status_dirty[dirty="true"]{{color:{'#FFB4A9' if dark else '#B5473C'};font-weight:750;}}
+QFrame#page_canvas{{background:{canvas};border:1px solid {border};border-radius:18px;}}
 QScrollArea#document_scroll{{background:{canvas};border:none;}}
 QScrollArea#document_scroll QWidget#qt_scrollarea_viewport{{background:{canvas};border:none;}}
 QScrollArea#document_scroll QLabel#pdf_page{{background:transparent;}}
 QWidget#welcome_page{{background:{canvas};}}
-QFrame#welcome_hero{{background:{panel_bg};border:1px solid {border};border-radius:22px;}}
-QLabel#welcome_title{{font-size:27px;font-weight:800;color:{title_fg};}}
-QLabel#welcome_subtitle{{font-size:12px;color:{muted};}}
-QLabel#welcome_section_title{{font-size:17px;font-weight:800;color:{title_fg};}}
-QLabel#welcome_hint{{font-size:10pt;color:{muted};}}
-QToolButton#recent_file_card{{background:{panel_bg};color:{'#E5EDF7' if dark else '#23334D'};border:1px solid {border};border-radius:14px;padding:12px;font-weight:600;text-align:center;}}
-QToolButton#recent_file_card:hover{{background:{'#203650' if dark else '#F4F8FD'};border:1px solid {ah};}}
-QToolButton#recent_file_card:pressed{{background:{'#253D5B' if dark else '#EAF2FC'};}}
-QPushButton#welcome_clear_button{{background:transparent;color:{ah};border:1px solid transparent;padding:6px 10px;}}
-QPushButton#welcome_clear_button:hover{{background:{tool_bg};border-color:{border};}}
-QPushButton#welcome_open_button{{background:{ah};color:#FFFFFF;border:1px solid {ah};border-radius:12px;padding:10px 16px;font-weight:700;}}
+QFrame#welcome_hero{{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0:{hero_top},stop:1:{hero_bottom});border:1px solid {border};border-radius:24px;}}
+QLabel#welcome_title{{font-size:31px;font-weight:850;color:{title_fg};}}
+QLabel#welcome_subtitle{{font-size:13px;color:{text_muted};}}
+QLabel#welcome_section_title{{font-size:18px;font-weight:800;color:{title_fg};}}
+QLabel#welcome_hint{{font-size:10pt;color:{text_muted};}}
+QToolButton#recent_file_card{{background:{panel_bg};color:{text_main};border:1px solid {border};border-radius:17px;padding:13px;font-size:10pt;font-weight:650;text-align:center;}}
+QToolButton#recent_file_card:hover{{background:{raised};border:1px solid {ah};}}
+QToolButton#recent_file_card:pressed{{background:{active_fill};border:1px solid {ah};}}
+QPushButton#welcome_clear_button{{background:transparent;color:{ah};border:1px solid transparent;padding:6px 11px;}}
+QPushButton#welcome_clear_button:hover{{background:{raised};border-color:{border};}}
+QPushButton#welcome_open_button{{background:{ah};color:#FFFFFF;border:1px solid {ah};border-radius:13px;padding:11px 18px;font-weight:750;min-height:42px;}}
 QPushButton#welcome_open_button:hover{{background:{ah};border-color:{ah};}}
-QLabel#welcome_empty{{color:{muted};padding:20px;border:1px dashed {border};border-radius:12px;}}
-QDockWidget{{color:{'#E5EDF7' if dark else '#23334D'};font-weight:700;}}
-QDockWidget::title{{background:{tool_bg};padding:9px 12px;border-bottom:1px solid {border};}}
+QLabel#welcome_empty{{color:{text_muted};padding:24px;border:1px dashed {border};border-radius:14px;background:{raised};}}
+QDockWidget{{color:{text_main};font-weight:700;}}
+QDockWidget::title{{background:{tool_bg};padding:11px 13px;border-bottom:1px solid {border};}}
+QTreeWidget,QListWidget{{background:{panel_bg};color:{text_main};border:1px solid {border};border-radius:12px;padding:6px;outline:0;}}
+QListWidget::item,QTreeWidget::item{{padding:8px;border-radius:8px;}}
+QListWidget::item:selected,QTreeWidget::item:selected{{background:{active_fill};color:{active_text};}}
+QTabWidget::pane{{border:1px solid {border};border-radius:13px;background:{panel_bg};top:-1px;}}
+QTabBar::tab{{background:{tool_bg};color:{text_muted};border:1px solid {border};padding:9px 14px;margin-right:4px;border-top-left-radius:9px;border-top-right-radius:9px;}}
+QTabBar::tab:selected{{background:{panel_bg};color:{ah};border-bottom:2px solid {ah};font-weight:750;}}
+QScrollBar:vertical{{width:10px;background:transparent;margin:3px;}}
+QScrollBar::handle:vertical{{background:{'#405773' if dark else '#CBD6E4'};border-radius:5px;min-height:32px;}}
+QScrollBar::handle:vertical:hover{{background:{'#607A97' if dark else '#9EADC2'};}}
+QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{{height:0;}}
+QSlider::groove:horizontal{{height:6px;background:{'#2A3A51' if dark else '#E2E9F2'};border-radius:3px;}}
+QSlider::handle:horizontal{{width:18px;height:18px;margin:-6px 0;border-radius:9px;background:{ah};border:3px solid {panel_bg};}}
 QDialog{{background:{dialog_bg};}}
+QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px solid {border};border-radius:7px;padding:6px 9px;}}
 '''
         self.setStyleSheet(base+common)
         if hasattr(self,'page_label'):
@@ -1095,11 +1129,11 @@ QDialog{{background:{dialog_bg};}}
         self.main_layout=QVBoxLayout(central_widget); self.main_layout.setContentsMargins(0,0,0,0); self.main_layout.setSpacing(0)
 
         # Header / brand row
-        self.header=QFrame(); self.header.setObjectName("app_header"); self.header.setMinimumHeight(76); hl=QHBoxLayout(self.header); hl.setContentsMargins(20,12,20,12); hl.setSpacing(12)
-        self.app_icon=QLabel(); self.app_icon.setPixmap(make_app_icon(46).pixmap(46,46)); hl.addWidget(self.app_icon)
+        self.header=QFrame(); self.header.setObjectName("app_header"); self.header.setMinimumHeight(82); hl=QHBoxLayout(self.header); hl.setContentsMargins(20,12,20,12); hl.setSpacing(12)
+        self.app_icon=QLabel(); self.app_icon.setPixmap(make_app_icon(48).pixmap(48,48)); hl.addWidget(self.app_icon)
         brand=QVBoxLayout(); self.brand_title=QLabel("Parin"); self.brand_title.setObjectName("brand_title"); self.brand_subtitle=QLabel("Fast • Focused • PDF workspace"); self.brand_subtitle.setObjectName("brand_subtitle"); brand.addWidget(self.brand_title); brand.addWidget(self.brand_subtitle); hl.addLayout(brand)
         hl.addStretch()
-        self.quick_search=QLineEdit(); self.quick_search.setObjectName("quick_search"); self.quick_search.setPlaceholderText("Search inside PDF…"); self.quick_search.setClearButtonEnabled(True); self.quick_search.setMinimumWidth(220); self.quick_search.returnPressed.connect(self.search_from_bar); hl.addWidget(self.quick_search)
+        self.quick_search=QLineEdit(); self.quick_search.setObjectName("quick_search"); self.quick_search.setPlaceholderText("Search inside PDF…"); self.quick_search.setClearButtonEnabled(True); self.quick_search.setMinimumWidth(210); self.quick_search.returnPressed.connect(self.search_from_bar); hl.addWidget(self.quick_search)
         self.btn_navigation=self.create_btn("Pages", self.toggle_navigation_panel, icon_key="More"); self.btn_navigation.setMinimumWidth(72); self.btn_navigation.setToolTip("Toggle the navigation panel"); hl.addWidget(self.btn_navigation)
         self.btn_settings=self.create_btn("Settings", self.open_settings, icon_key="Settings"); hl.addWidget(self.btn_settings)
         self.btn_lang=self.create_btn("Language", None, icon_key="Language"); hl.addWidget(self.btn_lang)
@@ -1125,7 +1159,9 @@ QDialog{{background:{dialog_bg};}}
             lab=QLabel(title); lab.setObjectName("group_label"); gl.addWidget(lab); self.group_labels[title]=lab
             for b in buttons: gl.addWidget(b)
             row.addWidget(box)
-        self.btn_open=self.create_btn("Open PDF",self.open_file,icon_key="Open"); self.btn_save=self.create_btn("Save PDF",self.save_file,icon_key="Save"); self.btn_print_opt=self.create_btn("Print",self.print_document,icon_key="Print")
+        self.btn_open=self.create_btn("Open PDF",self.open_file,icon_key="Open"); self.btn_open.setObjectName("primary_action")
+        self.btn_save=self.create_btn("Save PDF",self.save_file,icon_key="Save"); self.btn_save.setObjectName("secondary_action")
+        self.btn_print_opt=self.create_btn("Print",self.print_document,icon_key="Print")
         self.btn_pen=self.create_btn("Pen",lambda:self.toggle_tool('pen'),True,"Pen"); self.btn_highlight=self.create_btn("Highlight",lambda:self.toggle_tool('highlight'),True,"Highlight"); self.btn_eraser=self.create_btn("Eraser",lambda:self.toggle_tool('eraser'),True,"Eraser"); self.btn_add_text=self.create_btn("Text",lambda:self.toggle_tool('text'),True,"Text")
         self.font_selector=QComboBox(); self.font_selector.addItem("Sans serif","helv"); self.font_selector.addItem("Serif","tiro"); self.font_selector.addItem("Monospace","cour"); self.font_selector.setMinimumWidth(100); self.font_selector.setMaximumWidth(124); self.font_selector.setToolTip("Font used for the next text annotation")
         self.font_size=QSpinBox(); self.font_size.setRange(6,72); self.font_size.setValue(12); self.font_size.setSuffix(" pt"); self.font_size.setFixedWidth(76); self.font_size.setToolTip("Font size used for the next text annotation")
@@ -1207,13 +1243,13 @@ QDialog{{background:{dialog_bg};}}
 
     def _build_welcome_page(self):
         page_layout=QVBoxLayout(self.welcome_page)
-        page_layout.setContentsMargins(30,26,30,24)
-        page_layout.setSpacing(18)
+        page_layout.setContentsMargins(36,30,36,28)
+        page_layout.setSpacing(22)
         hero=QFrame(self.welcome_page)
-        hero.setObjectName("welcome_hero")
+        hero.setObjectName("welcome_hero"); hero.setMinimumHeight(166)
         hero_layout=QHBoxLayout(hero)
-        hero_layout.setContentsMargins(24,22,24,22)
-        hero_layout.setSpacing(18)
+        hero_layout.setContentsMargins(30,28,30,28)
+        hero_layout.setSpacing(24)
         copy=QVBoxLayout()
         copy.setSpacing(8)
         self.welcome_title=QLabel()
@@ -1252,10 +1288,8 @@ QDialog{{background:{dialog_bg};}}
         self.recent_grid_host=QWidget(self.welcome_page)
         self.recent_grid=QGridLayout(self.recent_grid_host)
         self.recent_grid.setContentsMargins(0,0,0,0)
-        self.recent_grid.setHorizontalSpacing(14)
-        self.recent_grid.setVerticalSpacing(14)
-        for col in range(4):
-            self.recent_grid.setColumnStretch(col,1)
+        self.recent_grid.setHorizontalSpacing(18)
+        self.recent_grid.setVerticalSpacing(18)
         page_layout.addWidget(self.recent_grid_host)
         self.welcome_empty=QLabel()
         self.welcome_empty.setObjectName("welcome_empty")
@@ -1263,6 +1297,10 @@ QDialog{{background:{dialog_bg};}}
         self.welcome_empty.setMinimumHeight(90)
         page_layout.addWidget(self.welcome_empty)
         page_layout.addStretch(1)
+        self._welcome_refresh_timer = QTimer(self.welcome_page)
+        self._welcome_refresh_timer.setSingleShot(True)
+        self._welcome_refresh_timer.setInterval(120)
+        self._welcome_refresh_timer.timeout.connect(self._refresh_welcome_page)
         self._retranslate_welcome()
         self._refresh_welcome_page()
 
@@ -1335,6 +1373,10 @@ QDialog{{background:{dialog_bg};}}
             if widget is not None:
                 widget.deleteLater()
         existing=[path for path in self.recent_files if os.path.isfile(path)][:8]
+        available_width = max(520, self.welcome_page.width() - 72)
+        columns = max(2, min(4, available_width // 260))
+        for column in range(8):
+            self.recent_grid.setColumnStretch(column, 1 if column < columns else 0)
         self.welcome_empty.setVisible(not existing)
         self.welcome_clear_button.setVisible(bool(existing))
         for index,path in enumerate(existing):
@@ -1344,12 +1386,12 @@ QDialog{{background:{dialog_bg};}}
             card.setToolTip(path)
             card.setText(Path(path).name)
             card.setIcon(self._recent_pdf_icon(path))
-            card.setIconSize(QSize(104,116))
-            card.setMinimumSize(180,178)
+            card.setIconSize(QSize(112,126))
+            card.setMinimumSize(168,194)
             card.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Fixed)
             card.setCursor(Qt.PointingHandCursor)
             card.clicked.connect(lambda checked=False,selected=path:self.open_file(selected))
-            self.recent_grid.addWidget(card,index//4,index%4)
+            self.recent_grid.addWidget(card,index//columns,index%columns)
 
     def _build_navigation_dock(self):
         self._navigation_needs_refresh = True
@@ -1783,7 +1825,7 @@ QDialog{{background:{dialog_bg};}}
 
     def create_btn(self,text,slot,checkable=False,icon_key=None):
         btn=QPushButton(clean_label(text),self)
-        btn.setCursor(Qt.PointingHandCursor); btn.setCheckable(checkable); btn.setMinimumWidth(82)
+        btn.setCursor(Qt.PointingHandCursor); btn.setCheckable(checkable); btn.setMinimumWidth(68); btn.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         glyph=ICON_GLYPHS.get(icon_key or clean_label(text).split(' ')[0],'•')
         accent=THEME_ACCENTS.get(self.app_settings.get('theme','Arctic Glass'),(58,141,255))
         btn.setIcon(make_action_icon(glyph,24,accent)); btn.setIconSize(QSize(24,24))
@@ -2002,6 +2044,9 @@ QDialog{{background:{dialog_bg};}}
 
     def resizeEvent(self,event):
         super().resizeEvent(event)
+        refresh_timer = getattr(self, "_welcome_refresh_timer", None)
+        if refresh_timer is not None and self.workspace_stack.currentWidget() is self.welcome_page:
+            refresh_timer.start()
         if hasattr(self,'blue_overlay'): self.blue_overlay.setGeometry(self.scroll_area.viewport().rect())
         if not self.doc or not self.app_settings.get('auto_fit', True) or self.fit_mode not in ('width','page'): return
         s=self.scroll_area.viewport().size()
