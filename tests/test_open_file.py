@@ -221,8 +221,15 @@ class PdfOpenRegressionTests(unittest.TestCase):
                     self.assertTrue(viewer._save_to_path(str(output_path)))
 
                     saved = fitz.open(str(output_path))
-                    self.assertTrue(saved.is_encrypted, "the save operation must retain PDF encryption")
-                    self.assertTrue(saved.authenticate(""), "the empty user password must still unlock the saved PDF")
+                    encryption = (saved.metadata or {}).get("encryption")
+                    self.assertTrue(
+                        encryption and str(encryption).strip().lower() not in ("none", "null"),
+                        f"the saved PDF must retain encryption metadata, got {encryption!r}",
+                    )
+                    self.assertGreater(
+                        saved.authenticate(""), 0,
+                        "the empty user password must still authenticate the saved PDF",
+                    )
                     page_text = saved.load_page(0).get_text().strip()
                     self.assertIn("Encrypted but open", page_text)
                 finally:
