@@ -1,6 +1,6 @@
 # Parin PDF Viewer
 
-## Development branch: 9.1.3
+## Development branch: 9.1.4
 
 This branch contains development work for the next Parin PDF Viewer iteration. It is **not a published release** until the automated checks pass and the maintainer reviews the changes.
 
@@ -16,6 +16,8 @@ This branch contains development work for the next Parin PDF Viewer iteration. I
 - Choose Sans serif, Serif or Monospace and a 6–72 pt font size before inserting text annotations.
 - Open local PDFs directly from the Linux file manager via the registered desktop handler, including `file://` URLs and uppercase `.PDF` extensions; a failed open leaves the current document intact.
 - Keep the PDF canvas at the rendered image's real dimensions; route wheel and touchpad events from the page, scroll area, and viewport consistently; continue across page boundaries after Qt finalizes the scroll range. Regression tests verify page pixels and viewport scrolling.
+- Preserve encrypted PDFs (including blank user-password files) on save, validate temporary output before replacement, and keep undo/redo snapshots consistent with encryption state.
+- Apply Fit Width, Fit Page and 100% settings reliably, and reset all settings widgets and values together.
 - Add a Rust native extension (PyO3) for defensive zoom normalization, with the existing Python fallback retained when the extension is unavailable.
 - A localized About page under Settings, with the exact project credit, application version, GitHub repository, GPL-3.0 license, and a copy-version button.
 - A drag-and-drop page organizer to reorder, rotate, delete, and extract pages, plus insertion from another PDF.
@@ -32,7 +34,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests
 ```
 
-GitHub Actions builds the `.deb` file as `parin-pdf_9.1.3_amd64.deb` and uploads it as the `parin-pdf-9.1.3-deb` workflow artifact. To build locally on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
+GitHub Actions builds the `.deb` file as `parin-pdf_9.1.4_amd64.deb` and uploads it as the `parin-pdf-9.1.4-deb` workflow artifact. To build locally on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
 
 ---
 

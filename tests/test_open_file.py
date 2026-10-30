@@ -169,6 +169,83 @@ class PdfOpenRegressionTests(unittest.TestCase):
                     image = viewer.scroll_area.viewport().grab().toImage()
                     sample = image.pixelColor(image.width() // 2, image.height() // 2)
                     self.assertGreater(sample.blue(), sample.red() + 30, "rendered page content must remain visible after viewport scrolling")
+
+                    # Scrolling upward from the top of page 3 returns to page 2 near its bottom.
+                    bar.setValue(bar.minimum())
+                    event = QWheelEvent(
+                        QPointF(4, 4), QPointF(4, 4), QPoint(0, 0), QPoint(0, 120),
+                        Qt.NoButton, Qt.NoModifier, Qt.ScrollPhase.ScrollUpdate, False,
+                    )
+                    self.app.sendEvent(viewer.scroll_area.viewport(), event)
+                    for _ in range(5):
+                        self.app.processEvents()
+                    self.assertEqual(viewer.current_page, 1, "upward viewport scrolling must return to the previous page")
+                    self.assertGreater(bar.value(), 0, "the previous page should resume near its bottom")
+
+                    # Ctrl+wheel remains zoom, not document scrolling.
+                    previous_zoom = viewer.zoom_factor
+                    event = QWheelEvent(
+                        QPointF(4, 4), QPointF(4, 4), QPoint(0, 0), QPoint(0, 120),
+                        Qt.NoButton, Qt.ControlModifier, Qt.ScrollPhase.ScrollUpdate, False,
+                    )
+                    self.app.sendEvent(viewer.scroll_area.viewport(), event)
+                    self.app.processEvents()
+                    self.assertGreater(viewer.zoom_factor, previous_zoom, "Ctrl+wheel-up must zoom in")
+                finally:
+                    viewer.close()
+                    self.app.processEvents()
+
+    def test_empty_password_encryption_is_preserved_when_saving(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source_path = Path(folder) / "blank-user-password.pdf"
+            output_path = Path(folder) / "saved-encrypted.pdf"
+            document = fitz.open()
+            page = document.new_page()
+            page.insert_text((72, 72), "Encrypted but open with an empty user password")
+            document.save(
+                str(source_path),
+                encryption=fitz.PDF_ENCRYPT_AES_256,
+                owner_pw="owner-secret",
+                user_pw="",
+            )
+            document.close()
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                saved = None
+                try:
+                    viewer.open_file(str(source_path))
+                    self.assertIsNotNone(viewer.doc)
+                    self.assertTrue(viewer._document_encrypted)
+                    self.assertEqual(viewer._document_password, "")
+                    self.assertTrue(viewer._save_to_path(str(output_path)))
+
+                    saved = fitz.open(str(output_path))
+                    self.assertTrue(saved.is_encrypted, "the save operation must retain PDF encryption")
+                    self.assertTrue(saved.authenticate(""), "the empty user password must still unlock the saved PDF")
+                    page_text = saved.load_page(0).get_text().strip()
+                    self.assertIn("Encrypted but open", page_text)
+                finally:
+                    if saved is not None:
+                        saved.close()
+                    viewer.close()
+                    self.app.processEvents()
+
+    def test_failed_save_keeps_the_open_document_usable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source_path = Path(folder) / "source.pdf"
+            self._make_pdf(source_path)
+            bad_output = Path(folder) / "missing-directory" / "output.pdf"
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                try:
+                    viewer.open_file(str(source_path))
+                    original_doc = viewer.doc
+                    with patch.object(QMessageBox, "critical"):
+                        self.assertFalse(viewer._save_to_path(str(bad_output)))
+                    self.assertIs(viewer.doc, original_doc)
+                    self.assertEqual(viewer.doc.page_count, 1)
+                    self.assertGreater(viewer.doc.load_page(0).rect.width, 0)
                 finally:
                     viewer.close()
                     self.app.processEvents()

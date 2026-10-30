@@ -16,7 +16,7 @@ fn clamp_zoom(value: f64, minimum: f64, maximum: f64) -> PyResult<f64> {
 #[pymodule]
 fn _parin_rust_core(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(clamp_zoom, module)?)?;
-    module.add("__version__", "9.1.0")?;
+    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
 
@@ -32,8 +32,15 @@ mod tests {
     }
 
     #[test]
+    fn non_finite_values_use_a_default_inside_custom_bounds() {
+        assert_eq!(clamp_zoom(f64::NAN, 2.0, 4.0).unwrap(), 2.0);
+        assert_eq!(clamp_zoom(f64::INFINITY, 0.1, 0.4).unwrap(), 0.4);
+    }
+
+    #[test]
     fn rejects_invalid_bounds() {
         assert!(clamp_zoom(1.0, 0.0, 8.0).is_err());
         assert!(clamp_zoom(1.0, 2.0, 1.0).is_err());
+        assert!(clamp_zoom(f64::NAN, 0.0, 8.0).is_err());
     }
 }

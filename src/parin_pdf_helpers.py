@@ -6,7 +6,7 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
-APP_VERSION = "9.1.3"
+APP_VERSION = "9.1.4"
 RECENT_FILES_LIMIT = 10
 
 # Prefer the native Rust implementation when installed; source checkouts retain a Python fallback.
@@ -77,11 +77,16 @@ def clamp_zoom(value: float, minimum: float = 0.1, maximum: float = 8.0) -> floa
         except (TypeError, ValueError, OverflowError):
             pass
     try:
-        zoom = float(value)
-    except (TypeError, ValueError):
-        return 1.0
-    if not math.isfinite(zoom):
-        return 1.0
-    if minimum <= 0 or maximum < minimum:
+        lower = float(minimum)
+        upper = float(maximum)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("Invalid zoom bounds.") from None
+    if not math.isfinite(lower) or not math.isfinite(upper) or lower <= 0 or upper < lower:
         raise ValueError("Invalid zoom bounds.")
-    return max(minimum, min(zoom, maximum))
+    try:
+        zoom = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return max(lower, min(1.0, upper))
+    if not math.isfinite(zoom):
+        return max(lower, min(1.0, upper))
+    return max(lower, min(zoom, upper))

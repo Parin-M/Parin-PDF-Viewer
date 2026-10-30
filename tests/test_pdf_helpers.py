@@ -2,6 +2,12 @@ import os
 import unittest
 from pathlib import Path
 
+
+try:
+    import _parin_rust_core
+except ImportError:
+    _parin_rust_core = None
+
 from parin_pdf_helpers import (
     APP_VERSION,
     add_recent_file,
@@ -60,8 +66,14 @@ class ZoomTests(unittest.TestCase):
 
 
 class VersionTests(unittest.TestCase):
-    def test_version_is_913(self):
-        self.assertEqual(APP_VERSION, "9.1.3")
+    def test_version_is_914(self):
+        self.assertEqual(APP_VERSION, "9.1.4")
+
+
+@unittest.skipIf(_parin_rust_core is None, "native Rust extension is not installed")
+class NativeVersionTests(unittest.TestCase):
+    def test_native_extension_version_matches_application(self):
+        self.assertEqual(_parin_rust_core.__version__, APP_VERSION)
 
 
 if __name__ == "__main__":

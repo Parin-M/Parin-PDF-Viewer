@@ -670,7 +670,51 @@ QFormLayout QLabel{{color:{text};}}
     def collect(self):
         return {'remember_last':self.remember_last.isChecked(),'restore_zoom':self.restore_zoom.isChecked(),'single_page':self.single_page.isChecked(),'confirm_close':self.confirm_close.isChecked(),'cache_pages':self.cache_pages.isChecked(),'smooth_render':self.smooth_render.isChecked(),'theme':self.theme.currentText(),'accent':self.accent.currentText(),'aero_enabled':self.aero.isChecked(),'compact_toolbar':self.compact.isChecked(),'status_bar':self.status.isChecked(),'page_shadow':self.page_shadow.isChecked(),'fit_mode':self.fit.currentText(),'zoom_step':self.zoom_step.value(),'rotation':self.rotation.currentText(),'auto_fit':self.auto_fit.isChecked(),'center_page':self.center_page.isChecked(),'audio_enabled':self.audio_enabled.isChecked(),'autoplay':self.autoplay.isChecked(),'volume':self.volume.value(),'large_toolbar':self.large.isChecked(),'show_toolbar_text':self.show_icons.isChecked(),'preload_pages':self.preload.isChecked(),'blue_filter':self.blue.isChecked(),'blue_filter_strength':self.blue_strength.value(),'night_reading':self.warm.isChecked(),'reduce_motion':self.reduce_motion.isChecked(),'ui_contrast':self.contrast.value(),'smooth_scroll':self.smooth_scroll.isChecked(),'page_gap':self.page_gap.isChecked(),'gpu_acceleration':self.gpu.isChecked(),'low_memory':self.low_memory.isChecked(),'animations':self.animations.isChecked(),'appearance_mode':self.appearance_mode.currentData() or 'light'}
     def reset_defaults(self):
-        d={'remember_last':True,'restore_zoom':True,'confirm_close':True,'cache_pages':False,'smooth_render':True,'theme':'Arctic Glass','accent':'Theme default','aero_enabled':True,'compact_toolbar':False,'status_bar':True,'page_shadow':True,'fit_mode':'Fit Width','zoom_step':25,'rotation':'0°','auto_fit':True,'center_page':True,'audio_enabled':True,'autoplay':False,'volume':50,'large_toolbar':True,'show_toolbar_text':True,'preload_pages':False,'blue_filter':False,'blue_filter_strength':35,'night_reading':False,'reduce_motion':False,'ui_contrast':100,'smooth_scroll':True,'page_gap':True,'gpu_acceleration':True,'low_memory':True,'animations':True,'appearance_mode':'light'}; self.settings.update(d); self.theme.setCurrentText(d['theme']); self.accent.setCurrentText(d['accent']); self.appearance_mode.setCurrentIndex(0); self.blue.setChecked(False); self.blue_strength.setValue(35); self.warm.setChecked(False); self.contrast.setValue(100); self.aero.setChecked(True); self.animations.setChecked(True); self.reduce_motion.setChecked(False); self.smooth_scroll.setChecked(True); self.page_gap.setChecked(True); self.gpu.setChecked(True); self.low_memory.setChecked(True); self._preview_style()
+        defaults = {
+            "remember_last": True, "restore_zoom": True, "single_page": True,
+            "confirm_close": True, "status_bar": True, "center_page": True,
+            "page_shadow": True, "appearance_mode": "light", "theme": "Arctic Glass",
+            "accent": "Theme default", "aero_enabled": True, "large_toolbar": True,
+            "show_toolbar_text": True, "compact_toolbar": False, "animations": True,
+            "blue_filter": False, "blue_filter_strength": 35, "night_reading": False,
+            "reduce_motion": False, "ui_contrast": 100, "fit_mode": "Fit Width",
+            "rotation": "0°", "zoom_step": 25, "auto_fit": True, "smooth_scroll": True,
+            "page_gap": True, "cache_pages": True, "smooth_render": True,
+            "preload_pages": True, "gpu_acceleration": True, "low_memory": False,
+            "audio_enabled": True, "autoplay": False, "volume": 50, "smart_ink": True,
+        }
+        self.settings.clear()
+        self.settings.update(defaults)
+
+        checkboxes = {
+            "remember_last": self.remember_last, "restore_zoom": self.restore_zoom,
+            "single_page": self.single_page, "confirm_close": self.confirm_close,
+            "status_bar": self.status, "center_page": self.center_page,
+            "page_shadow": self.page_shadow, "aero_enabled": self.aero,
+            "large_toolbar": self.large, "show_toolbar_text": self.show_icons,
+            "compact_toolbar": self.compact, "animations": self.animations,
+            "blue_filter": self.blue, "night_reading": self.warm,
+            "reduce_motion": self.reduce_motion, "auto_fit": self.auto_fit,
+            "smooth_scroll": self.smooth_scroll, "page_gap": self.page_gap,
+            "cache_pages": self.cache_pages, "smooth_render": self.smooth_render,
+            "preload_pages": self.preload, "gpu_acceleration": self.gpu,
+            "low_memory": self.low_memory, "audio_enabled": self.audio_enabled,
+            "autoplay": self.autoplay,
+        }
+        for key, widget in checkboxes.items():
+            widget.setChecked(defaults[key])
+
+        self.appearance_mode.setCurrentIndex(0)
+        self.theme.setCurrentText(defaults["theme"])
+        self.accent.setCurrentText(defaults["accent"])
+        self.fit.setCurrentText(defaults["fit_mode"])
+        self.rotation.setCurrentText(defaults["rotation"])
+        self.zoom_step.setValue(defaults["zoom_step"])
+        self.blue_strength.setValue(defaults["blue_filter_strength"])
+        self.contrast.setValue(defaults["ui_contrast"])
+        self.volume.setValue(defaults["volume"])
+        self._preview_style()
+
     def apply_changes(self):
         self.settings.update(self.collect()); self.viewer.app_settings.update(self.settings); self.viewer.apply_app_settings(); self.settings_changed.emit(self.settings)
     def accept(self): self.apply_changes(); super().accept()
@@ -841,6 +885,7 @@ class ParinPDFViewer(QMainWindow):
         self._last_search_rect_index = -1
         self.search_highlight = None
         self._document_password = ''
+        self._document_encrypted = False
         self._document_dirty = False
         self.app_settings = {
             'remember_last': self.settings_store.value('remember_last', True, type=bool),
@@ -865,7 +910,7 @@ class ParinPDFViewer(QMainWindow):
             'show_toolbar_text': self.settings_store.value('show_toolbar_text', True, type=bool),
             'preload_pages': self.settings_store.value('preload_pages', True, type=bool),
             'appearance_mode': str(self.settings_store.value('appearance_mode', 'light', type=str)).lower(),
-            'accent': self.settings_store.value('accent', 'آبی نئون'),
+            'accent': self.settings_store.value('accent', 'Theme default'),
             'aero_enabled': self.settings_store.value('aero_enabled', True, type=bool),
             'blue_filter': self.settings_store.value('blue_filter', False, type=bool),
             'blue_filter_strength': self.settings_store.value('blue_filter_strength', 35, type=int),
@@ -1005,10 +1050,29 @@ QDialog{{background:{dialog_bg};}}
                     if current.lower().startswith(key.lower()): glyph=val; break
                 b.setIcon(make_action_icon(glyph,24,accent)); b.setIconSize(QSize(24,24))
         self._update_blue_filter()
+        if hasattr(self, "scroll_area"):
+            alignment = Qt.AlignTop | (Qt.AlignHCenter if self.app_settings.get("center_page", True) else Qt.AlignLeft)
+            self.scroll_area.setAlignment(alignment)
+        if hasattr(self, "btn_lofi"):
+            audio_enabled = bool(self.app_settings.get("audio_enabled", True))
+            self.btn_lofi.setEnabled(audio_enabled)
+            if not audio_enabled and self.is_lofi_playing:
+                self.player.stop()
+                self.is_lofi_playing = False
+                self.btn_lofi.setText(TRANSLATIONS[self.current_lang]["lofi"])
         if self.doc:
-            fit=self.app_settings.get('fit_mode','Fit Width')
-            if fit=='Fit Width': self.fit_width()
-            elif fit=='Fit Page': self.fit_page()
+            self.rotation = {"0°": 0, "90°": 90, "180°": 180, "270°": 270}.get(
+                self.app_settings.get("rotation", "0°"), 0
+            )
+            fit = self.app_settings.get("fit_mode", "Fit Width")
+            self.fit_mode = {"Fit Width": "width", "Fit Page": "page", "100%": None}.get(fit, "width")
+            if self.fit_mode == "width":
+                self._set_fit_width()
+            elif self.fit_mode == "page":
+                self._set_fit_page()
+            else:
+                self.zoom_factor = 1.0
+                self.render_page()
 
     def init_ui(self):
         central_widget=QWidget(self); self.setCentralWidget(central_widget)
@@ -1472,7 +1536,10 @@ QDialog{{background:{dialog_bg};}}
         try:
             if self.file_path and os.path.isfile(self.file_path) and os.path.getsize(self.file_path) > self._history_max_bytes:
                 return None
-            snapshot = self.doc.tobytes(garbage=0, deflate=True)
+            options = {"garbage": 0, "deflate": True}
+            if self._document_encrypted:
+                options["encryption"] = fitz.PDF_ENCRYPT_KEEP
+            snapshot = self.doc.tobytes(**options)
             return snapshot if len(snapshot) <= self._history_max_bytes else None
         except Exception:
             return None
@@ -1496,12 +1563,14 @@ QDialog{{background:{dialog_bg};}}
         replacement = None
         try:
             replacement = fitz.open(stream=snapshot, filetype="pdf")
-            if replacement.is_encrypted and self._document_password:
-                if not replacement.authenticate(self._document_password):
-                    raise RuntimeError("The history snapshot could not be authenticated.")
+            replacement_encrypted = bool(replacement.is_encrypted)
+            if replacement_encrypted and not replacement.authenticate(self._document_password):
+                raise RuntimeError("The history snapshot could not be authenticated.")
             previous = self.doc
             self.doc = replacement
             replacement = None
+            self._document_encrypted = replacement_encrypted
+            self._last_rendered_page_index = None
             if previous:
                 previous.close()
             self.current_page = max(0, min(self.current_page, self.doc.page_count - 1))
@@ -1518,8 +1587,10 @@ QDialog{{background:{dialog_bg};}}
             self._refresh_navigation()
             self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
             self.statusBar().showMessage(f"{label} complete · unsaved changes", 5000)
+            return True
         except Exception as exc:
             self.statusBar().showMessage(f"{label} failed: {exc}", 7000)
+            return False
         finally:
             if replacement is not None:
                 replacement.close()
@@ -1535,9 +1606,10 @@ QDialog{{background:{dialog_bg};}}
             self._undo_disabled_for_size = True
             self.statusBar().showMessage("Undo/redo history is unavailable for this PDF size.", 6000)
             return
-        previous = self._undo_stack.pop()
-        self._redo_stack.append(current)
-        self._restore_history_snapshot(previous, "Undo")
+        previous = self._undo_stack[-1]
+        if self._restore_history_snapshot(previous, "Undo"):
+            self._undo_stack.pop()
+            self._redo_stack.append(current)
 
     def redo_edit(self):
         if not self.doc or not self._redo_stack:
@@ -1550,10 +1622,11 @@ QDialog{{background:{dialog_bg};}}
             self._undo_disabled_for_size = True
             self.statusBar().showMessage("Undo/redo history is unavailable for this PDF size.", 6000)
             return
-        next_state = self._redo_stack.pop()
-        self._undo_stack.append(current)
-        del self._undo_stack[:-5]
-        self._restore_history_snapshot(next_state, "Redo")
+        next_state = self._redo_stack[-1]
+        if self._restore_history_snapshot(next_state, "Redo"):
+            self._redo_stack.pop()
+            self._undo_stack.append(current)
+            del self._undo_stack[:-5]
 
     def open_page_organizer(self):
         if not self.doc:
@@ -1574,13 +1647,16 @@ QDialog{{background:{dialog_bg};}}
         source = None
         try:
             source = fitz.open(source_path)
-            if source.is_encrypted:
-                password, ok = QInputDialog.getText(self, "Unlock source PDF", "Enter the source PDF password:", QLineEdit.Password)
-                if not ok or not password:
-                    return
-                if not source.authenticate(password):
+            if source.is_encrypted and not source.authenticate(""):
+                while True:
+                    password, ok = QInputDialog.getText(
+                        self, "Unlock source PDF", "Enter the source PDF password:", QLineEdit.Password
+                    )
+                    if not ok:
+                        return
+                    if source.authenticate(password):
+                        break
                     QMessageBox.critical(self, "Insert pages", "The source PDF password is incorrect.")
-                    return
             if source.page_count < 1:
                 QMessageBox.information(self, "Insert pages", "The selected PDF has no pages to insert.")
                 return
@@ -1746,14 +1822,16 @@ QDialog{{background:{dialog_bg};}}
         if not file_path:
             return
         candidate = None
+        document_encrypted = False
         try:
             file_path = os.path.abspath(os.path.expanduser(file_path))
             if not os.path.isfile(file_path):
                 raise FileNotFoundError(f"File does not exist: {file_path}")
             file_size = os.path.getsize(file_path)
             candidate = fitz.open(file_path)
+            document_encrypted = bool(candidate.is_encrypted)
             password = ""
-            if candidate.is_encrypted:
+            if document_encrypted:
                 # Some encrypted PDFs intentionally use an empty user password.
                 if not candidate.authenticate(""):
                     while True:
@@ -1790,6 +1868,7 @@ QDialog{{background:{dialog_bg};}}
                     pass
             self.file_path = file_path
             self._document_password = password
+            self._document_encrypted = document_encrypted
             self._document_dirty = False
             self.large_file_mode = file_size >= 1024 ** 3
             if self.large_file_mode:
@@ -1830,6 +1909,8 @@ QDialog{{background:{dialog_bg};}}
             self._add_recent_file(file_path)
             self._persist_reading_position()
             self.statusBar().showMessage(f"Opened {Path(file_path).name} · {self.doc.page_count} pages", 5000)
+            if self.app_settings.get("audio_enabled", True) and self.app_settings.get("autoplay", False):
+                QTimer.singleShot(0, self.toggle_lofi)
         except Exception as exc:
             if candidate is not None:
                 try:
@@ -2180,6 +2261,9 @@ QDialog{{background:{dialog_bg};}}
         super().wheelEvent(event)
 
     def toggle_lofi(self):
+        if not self.app_settings.get("audio_enabled", True):
+            self.statusBar().showMessage("Audio playback is disabled in Settings.", 4000)
+            return
         if self.is_lofi_playing:
             self.player.stop()
             self.is_lofi_playing = False
@@ -2234,62 +2318,78 @@ QDialog{{background:{dialog_bg};}}
     def _save_to_path(self, save_path, save_options=None, password_after=None):
         if not self.doc:
             return False
+
         save_path = ensure_pdf_extension(os.path.abspath(os.path.expanduser(save_path)))
         output_dir = os.path.dirname(save_path) or os.getcwd()
-        source_path = self.file_path
         source_password = self._document_password
+        source_encrypted = bool(self._document_encrypted)
         old_doc = self.doc
         page_to_restore = self.current_page
         temp_path = None
+        candidate_doc = None
+
         try:
             fd, temp_path = tempfile.mkstemp(prefix=".parin-pdf-", suffix=".pdf", dir=output_dir)
             os.close(fd)
             os.unlink(temp_path)
+
             options = {"garbage": 0 if self.large_file_mode else 4, "deflate": True}
             if save_options:
                 options.update(save_options)
-            elif source_password:
-                # Preserve the original encryption when performing a normal save.
+            elif source_encrypted:
+                # Preserve encryption even when the PDF's user password is empty.
                 options["encryption"] = fitz.PDF_ENCRYPT_KEEP
+
             old_doc.save(temp_path, **options)
-            old_doc.close()
-            self.doc = None
+
+            # Validate the output while the original document is still usable.
+            candidate_doc = fitz.open(temp_path)
+            candidate_encrypted = bool(candidate_doc.is_encrypted)
+            candidate_password = source_password if password_after is None else password_after
+            if candidate_encrypted and not candidate_doc.authenticate(candidate_password):
+                raise RuntimeError("The saved PDF could not be unlocked with the active password.")
+            if candidate_doc.page_count < 1:
+                raise RuntimeError("The saved PDF contains no readable pages.")
+            target_page = min(page_to_restore, candidate_doc.page_count - 1)
+            candidate_doc.load_page(target_page)
+
+            # Atomic replacement happens only after the new file is valid.
             os.replace(temp_path, save_path)
             temp_path = None
-            self.doc = fitz.open(save_path)
-            self._document_password = source_password if password_after is None else password_after
-            if self.doc.is_encrypted and self._document_password:
-                if not self.doc.authenticate(self._document_password):
-                    raise RuntimeError("The saved PDF could not be unlocked with the active password.")
-            self.file_path = save_path
-            self._document_dirty = False
-            self.current_page = min(page_to_restore, max(0, self.doc.page_count - 1))
-            self._thumbnail_cache.clear()
-            self._refresh_navigation()
-            self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
-            self._add_recent_file(save_path)
-            self.statusBar().showMessage(f"Saved {Path(save_path).name}", 5000)
-            return True
+
         except Exception as exc:
+            if candidate_doc is not None:
+                try:
+                    candidate_doc.close()
+                except Exception:
+                    pass
             if temp_path and os.path.exists(temp_path):
                 try:
                     os.unlink(temp_path)
                 except OSError:
                     pass
-            if self.doc is None or getattr(self.doc, "is_closed", False):
-                try:
-                    restore_path = source_path if os.path.isfile(source_path) else save_path
-                    self.doc = fitz.open(restore_path)
-                    if self.doc.is_encrypted and source_password:
-                        self.doc.authenticate(source_password)
-                    self.file_path = restore_path
-                    self._document_password = source_password
-                    self.current_page = min(page_to_restore, max(0, self.doc.page_count - 1))
-                    self.render_page()
-                except Exception:
-                    self.doc = None
             QMessageBox.critical(self, "Save failed", f"Could not save the PDF.\\n\\n{exc}")
             return False
+
+        # Commit the new in-memory document only after the replacement is validated.
+        self.doc = candidate_doc
+        candidate_doc = None
+        try:
+            old_doc.close()
+        except Exception:
+            pass
+        self.file_path = save_path
+        self._document_password = candidate_password
+        self._document_encrypted = candidate_encrypted
+        self._document_dirty = False
+        self.current_page = target_page
+        self._last_rendered_page_index = None
+        self._thumbnail_cache.clear()
+        self._refresh_navigation()
+        self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
+        self._add_recent_file(save_path)
+        self.statusBar().showMessage(f"Saved {Path(save_path).name}", 5000)
+        return True
 
     def save_file(self):
         if not self.doc:

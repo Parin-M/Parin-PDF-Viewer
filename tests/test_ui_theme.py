@@ -1,8 +1,12 @@
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import pymupdf as fitz
 
 from PySide6.QtWidgets import QApplication
 
@@ -68,6 +72,68 @@ class InterfaceThemeTests(unittest.TestCase):
                 viewer.close()
                 self.app.processEvents()
 
+
+    def test_reset_defaults_updates_every_settings_widget(self):
+        with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+            viewer = ParinPDFViewer()
+            dialog = None
+            try:
+                dialog = SettingsDialog(viewer)
+                dialog.remember_last.setChecked(False)
+                dialog.single_page.setChecked(False)
+                dialog.status.setChecked(False)
+                dialog.show_icons.setChecked(False)
+                dialog.low_memory.setChecked(True)
+                dialog.audio_enabled.setChecked(False)
+                dialog.fit.setCurrentText("100%")
+                dialog.volume.setValue(7)
+
+                dialog.reset_defaults()
+                settings = dialog.collect()
+                self.assertTrue(settings["remember_last"])
+                self.assertTrue(settings["single_page"])
+                self.assertTrue(settings["status_bar"])
+                self.assertTrue(settings["show_toolbar_text"])
+                self.assertFalse(settings["low_memory"])
+                self.assertTrue(settings["audio_enabled"])
+                self.assertEqual(settings["fit_mode"], "Fit Width")
+                self.assertEqual(settings["volume"], 50)
+                self.assertTrue(settings["preload_pages"])
+            finally:
+                if dialog is not None:
+                    dialog.close()
+                viewer.close()
+                self.app.processEvents()
+
+    def test_settings_apply_100_percent_mode_and_rotation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "fit-mode.pdf"
+            document = fitz.open()
+            document.new_page()
+            document.save(str(path))
+            document.close()
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                dialog = None
+                try:
+                    viewer.open_file(str(path))
+                    dialog = SettingsDialog(viewer)
+                    dialog.fit.setCurrentText("Fit Page")
+                    dialog.apply_changes()
+                    self.assertEqual(viewer.fit_mode, "page")
+
+                    dialog.fit.setCurrentText("100%")
+                    dialog.rotation.setCurrentText("90°")
+                    dialog.apply_changes()
+                    self.assertIsNone(viewer.fit_mode)
+                    self.assertEqual(viewer.zoom_factor, 1.0)
+                    self.assertEqual(viewer.rotation, 90)
+                finally:
+                    if dialog is not None:
+                        dialog.close()
+                    viewer.close()
+                    self.app.processEvents()
 
     def test_text_font_size_and_smart_ink_controls(self):
         with patch("parin_pdf_viewer.QSettings", _MemorySettings):

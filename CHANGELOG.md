@@ -1,5 +1,16 @@
 # Changelog
 
+## 9.1.4 — Full audit fixes
+
+- Preserve encryption for PDFs with an empty user password, validate temporary output before replacing the open file, and keep the previous document usable when saving fails.
+- Preserve encryption in undo/redo snapshots and keep history stacks unchanged if restoration fails.
+- Apply 100% zoom and selected page rotation/alignment settings correctly.
+- Reset all Settings controls and stored values together.
+- Respect the audio-enabled preference and synchronize the native module version with the Cargo package version.
+- Make Python and Rust zoom normalization agree for non-finite values and custom bounds.
+- Expand regression coverage for upward/downward wheel transitions, Ctrl+wheel zoom, encrypted saves, settings reset, and fit-mode changes.
+
+
 ## 9.1.3 — Fix wheel routing and stale scroll ranges
 
 - Handle wheel input centrally for the page label, the scroll area's own surface, and its viewport, including blank margins around fitted pages.
