@@ -53,7 +53,7 @@ exit 0
 EOF
 chmod 0755 package/DEBIAN/postinst
 
-dpkg-deb --build package "dist-deb/parin-pdf_${VERSION}_amd64.deb"
+dpkg-deb --root-owner-group --build package "dist-deb/parin-pdf_${VERSION}_amd64.deb"
 
 echo
 echo "SUCCESS:"
