@@ -22,6 +22,22 @@ from parin_handwriting_assist import SmartInkAssistant
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
+def _is_document_encrypted(document):
+    """Detect PDF encryption even after PyMuPDF auto-authenticates an empty password."""
+    if document is None or getattr(document, "is_closed", False):
+        return False
+    try:
+        encryption = (document.metadata or {}).get("encryption")
+        if encryption and str(encryption).strip().lower() not in ("none", "null"):
+            return True
+    except Exception:
+        pass
+    try:
+        return bool(document.is_encrypted)
+    except Exception:
+        return False
+
+
 def clean_label(value):
     if not isinstance(value, str):
         return value
@@ -1563,8 +1579,8 @@ QDialog{{background:{dialog_bg};}}
         replacement = None
         try:
             replacement = fitz.open(stream=snapshot, filetype="pdf")
-            replacement_encrypted = bool(replacement.is_encrypted)
-            if replacement_encrypted and not replacement.authenticate(self._document_password):
+            replacement_encrypted = _is_document_encrypted(replacement)
+            if replacement_encrypted and getattr(replacement, "needs_pass", False) and not replacement.authenticate(self._document_password):
                 raise RuntimeError("The history snapshot could not be authenticated.")
             previous = self.doc
             self.doc = replacement
@@ -1647,7 +1663,7 @@ QDialog{{background:{dialog_bg};}}
         source = None
         try:
             source = fitz.open(source_path)
-            if source.is_encrypted and not source.authenticate(""):
+            if _is_document_encrypted(source) and getattr(source, "needs_pass", False) and not source.authenticate(""):
                 while True:
                     password, ok = QInputDialog.getText(
                         self, "Unlock source PDF", "Enter the source PDF password:", QLineEdit.Password
@@ -1745,6 +1761,11 @@ QDialog{{background:{dialog_bg};}}
         if not self._confirm_unsaved_changes():
             event.ignore()
             return
+        self._open_render_generation += 1
+        self._wheel_transition_generation += 1
+        thumbnail_timer = getattr(self, "_thumbnail_refresh_timer", None)
+        if thumbnail_timer is not None:
+            thumbnail_timer.stop()
         self._persist_reading_position()
         try:
             self.player.stop()
@@ -1829,9 +1850,9 @@ QDialog{{background:{dialog_bg};}}
                 raise FileNotFoundError(f"File does not exist: {file_path}")
             file_size = os.path.getsize(file_path)
             candidate = fitz.open(file_path)
-            document_encrypted = bool(candidate.is_encrypted)
+            document_encrypted = _is_document_encrypted(candidate)
             password = ""
-            if document_encrypted:
+            if document_encrypted and getattr(candidate, "needs_pass", False):
                 # Some encrypted PDFs intentionally use an empty user password.
                 if not candidate.authenticate(""):
                     while True:
@@ -1920,7 +1941,7 @@ QDialog{{background:{dialog_bg};}}
             QMessageBox.critical(self, "Cannot open PDF", f"The file could not be opened.\\n\\n{exc}")
 
     def _finish_open_render(self, generation):
-        if generation != self._open_render_generation or not self.doc:
+        if generation != self._open_render_generation or self.doc is None or getattr(self.doc, "is_closed", False):
             return
         if hasattr(self, "workspace_stack"):
             self.workspace_stack.setCurrentWidget(self.scroll_area)
@@ -1933,7 +1954,7 @@ QDialog{{background:{dialog_bg};}}
         return (page.rect.height, page.rect.width) if self.rotation % 180 else (page.rect.width, page.rect.height)
 
     def render_page(self):
-        if not self.doc or not (0 <= self.current_page < self.doc.page_count):
+        if self.doc is None or getattr(self.doc, "is_closed", False) or not (0 <= self.current_page < self.doc.page_count):
             return
         try:
             page_changed = getattr(self, "_last_rendered_page_index", None) != self.current_page
@@ -2185,7 +2206,7 @@ QDialog{{background:{dialog_bg};}}
 
     def handle_pdf_wheel(self, event):
         """Handle wheel movement for labels, viewport margins and the scroll area."""
-        if not self.doc or not hasattr(self, "scroll_area"):
+        if self.doc is None or getattr(self.doc, "is_closed", False) or not hasattr(self, "scroll_area"):
             return False
 
         pixel_delta = event.pixelDelta().y()
@@ -2223,7 +2244,7 @@ QDialog{{background:{dialog_bg};}}
 
     def _change_page_from_wheel(self, page_index, overflow, edge):
         """Change pages once and restore the scroll offset after Qt updates its range."""
-        if not self.doc or not 0 <= page_index < self.doc.page_count:
+        if self.doc is None or getattr(self.doc, "is_closed", False) or not 0 <= page_index < self.doc.page_count:
             return
         self._wheel_transition_generation += 1
         generation = self._wheel_transition_generation
@@ -2344,9 +2365,9 @@ QDialog{{background:{dialog_bg};}}
 
             # Validate the output while the original document is still usable.
             candidate_doc = fitz.open(temp_path)
-            candidate_encrypted = bool(candidate_doc.is_encrypted)
+            candidate_encrypted = _is_document_encrypted(candidate_doc)
             candidate_password = source_password if password_after is None else password_after
-            if candidate_encrypted and not candidate_doc.authenticate(candidate_password):
+            if candidate_encrypted and getattr(candidate_doc, "needs_pass", False) and not candidate_doc.authenticate(candidate_password):
                 raise RuntimeError("The saved PDF could not be unlocked with the active password.")
             if candidate_doc.page_count < 1:
                 raise RuntimeError("The saved PDF contains no readable pages.")
