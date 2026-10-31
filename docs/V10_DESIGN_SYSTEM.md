@@ -171,3 +171,13 @@ A cancelled password prompt leaves the destination untouched. The insertion
 itself continues through `page_operations.py`; if the underlying page import
 fails after mutation begins and an undo checkpoint was recorded, the Reader
 restores that checkpoint before reporting the error.
+
+
+### PDF annotation service
+
+Annotation mutation is isolated in the Qt-free
+`src/parin_ui/annotation_service.py`. The service creates pen and highlighter
+ink annotations, places FreeText annotations using the Reader's existing
+sizing and page-edge rules, and erases annotations intersecting a zoom-aware
+brush. The canvas continues to own pointer events, live stroke preview,
+handwriting smoothing, undo checkpoints, notifications and rendering.

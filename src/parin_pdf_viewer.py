@@ -31,6 +31,11 @@ from parin_ui.research_studio import ResearchStudio
 from parin_ui.compare_studio import CompareStudio
 from parin_ui.page_organizer import PageOrganizerDialog
 from parin_ui.page_operations import insert_pdf_pages
+from parin_ui.annotation_service import (
+    add_ink_annotation,
+    add_text_annotation,
+    erase_annotations_at_point,
+)
 from parin_ui.settings_dialog import SettingsDialog, SettingsDialogResources
 from parin_ui.settings_i18n import SETTINGS_I18N
 from parin_ui.navigation_i18n import NAVIGATION_I18N
@@ -316,23 +321,21 @@ class PDFPageLabel(QLabel):
             font_size = int(self.viewer.font_size.value()) if hasattr(self.viewer, "font_size") else 12
             font_name = self.viewer.font_selector.currentData() if hasattr(self.viewer, "font_selector") else "helv"
             font_name = str(font_name or "helv")
-            width = min(max(80.0, len(text) * font_size * 0.68), max(40.0, page.rect.width))
-            height = min(max(30.0, font_size * 2.6), max(20.0, page.rect.height))
-            x_max = max(page.rect.x0, page.rect.x1 - width)
-            y_max = max(page.rect.y0, page.rect.y1 - height)
-            x = min(max(page.rect.x0, pdf_pt.x), x_max)
-            y = min(max(page.rect.y0, pdf_pt.y), y_max)
-            rect = fitz.Rect(x, y, x + width, y + height)
-            r, g, b = (self.viewer.selected_color.redF(),
-                       self.viewer.selected_color.greenF(),
-                       self.viewer.selected_color.blueF())
+            color = (
+                self.viewer.selected_color.redF(),
+                self.viewer.selected_color.greenF(),
+                self.viewer.selected_color.blueF(),
+            )
             try:
                 self.viewer._record_undo()
-                annot = page.add_freetext_annot(
-                    rect, text, fontsize=font_size, fontname=font_name,
-                    text_color=(r, g, b), fill_color=None, border_width=0,
+                add_text_annotation(
+                    page,
+                    text,
+                    pdf_pt,
+                    font_size=font_size,
+                    font_name=font_name,
+                    text_color=color,
                 )
-                annot.update()
                 self.viewer.mark_document_modified()
                 self.viewer.render_page()
             except Exception as exc:
@@ -371,14 +374,12 @@ class PDFPageLabel(QLabel):
                        self.viewer.selected_color.blueF())
             try:
                 self.viewer._record_undo()
-                annot = page.add_ink_annot([stroke])
-                annot.set_colors(stroke=(r, g, b))
-                if self.viewer.active_tool == "pen":
-                    annot.set_border(width=2)
-                elif self.viewer.active_tool == "highlight":
-                    annot.set_border(width=14)
-                    annot.set_opacity(0.35)
-                annot.update()
+                add_ink_annotation(
+                    page,
+                    stroke,
+                    (r, g, b),
+                    tool=self.viewer.active_tool,
+                )
                 if self.viewer.app_settings.get("smart_ink", True):
                     profile = self.viewer.handwriting_assist.describe_style(stroke)
                     self.viewer.statusBar().showMessage(f"Smart Ink · {profile} stroke", 1800)
@@ -1990,22 +1991,15 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self._apply_fit() if self.fit_mode in ('width','page') else self.render_page()
 
     def erase_at_point(self, page, pdf_pt):
-        radius = 20 / self.zoom_factor
-        erase_rect = fitz.Rect(pdf_pt.x - radius, pdf_pt.y - radius, pdf_pt.x + radius, pdf_pt.y + radius)
-
-        erased = False
-        annots_to_delete = []
-        for annot in page.annots():
-            if annot.rect.intersects(erase_rect):
-                annots_to_delete.append(annot)
-
-        for annot in annots_to_delete:
-            page.delete_annot(annot)
-            erased = True
-
+        erased = erase_annotations_at_point(
+            page,
+            pdf_pt,
+            zoom_factor=self.zoom_factor,
+        )
         if erased:
             self.mark_document_modified()
             self.render_page()
+        return erased
 
     def handle_pdf_wheel(self, event):
         """Handle wheel movement for labels, viewport margins and the scroll area."""
