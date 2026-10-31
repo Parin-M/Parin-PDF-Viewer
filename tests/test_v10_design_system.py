@@ -150,6 +150,24 @@ class WorkspaceShellTests(unittest.TestCase):
         finally:
             shell.close()
 
+
+    def test_focus_mode_hides_panels_and_restores_responsive_layout(self):
+        shell = ParinWorkspaceShell()
+        try:
+            shell.set_focus_mode(True)
+            self.assertTrue(shell._focus_mode)
+            self.assertTrue(shell.toolbar_frame.isHidden())
+            self.assertTrue(shell.navigation_panel.isHidden())
+            self.assertTrue(shell.inspector_panel.isHidden())
+            self.assertFalse(shell.focus_exit_button.isHidden())
+
+            shell.set_focus_mode(False)
+            self.assertFalse(shell._focus_mode)
+            self.assertFalse(shell.toolbar_frame.isHidden())
+            self.assertTrue(shell.focus_exit_button.isHidden())
+        finally:
+            shell.close()
+
     def test_invalid_workspace_is_rejected(self):
         shell = ParinWorkspaceShell()
         try:
@@ -263,6 +281,30 @@ class IntegratedV10ShellTests(unittest.TestCase):
         page = StudioLanding("research")
         self.assertEqual(page.workspace_id, "research")
         self.assertEqual(page.status.text(), "IN DEVELOPMENT")
+
+
+    def test_focus_studio_keeps_pdf_widget_and_can_return_to_reader(self):
+        from parin_pdf_viewer import ParinPDFViewer
+        from unittest.mock import patch
+
+        with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+            viewer = ParinPDFViewer()
+            try:
+                viewer.v10_shell.set_active_workspace("focus")
+                self.assertTrue(viewer.v10_shell._focus_mode)
+                self.assertIs(viewer.v10_shell._workspace_widget, viewer.workspace_stack)
+                self.assertTrue(viewer.v10_shell.toolbar_frame.isHidden())
+                self.assertTrue(viewer.v10_shell.navigation_panel.isHidden())
+                self.assertTrue(viewer.v10_shell.inspector_panel.isHidden())
+                self.assertFalse(viewer.v10_shell.focus_exit_button.isHidden())
+
+                viewer.v10_shell.focus_exit_button.click()
+                self.assertEqual(viewer.v10_shell.active_workspace, "reader")
+                self.assertFalse(viewer.v10_shell._focus_mode)
+                self.assertIs(viewer.v10_shell._workspace_widget, viewer.workspace_stack)
+            finally:
+                viewer.close()
+                self.app.processEvents()
 
 
 if __name__ == "__main__":

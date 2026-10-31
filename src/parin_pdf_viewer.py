@@ -1325,6 +1325,9 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self.v10_shell.fit_width_button.clicked.connect(self.fit_width)
         self.v10_shell.fit_page_button.clicked.connect(self.fit_page)
         self.v10_shell.workspaceChanged.connect(self._on_v10_workspace_changed)
+        self.v10_shell.focusExitRequested.connect(
+            lambda: self.v10_shell.set_active_workspace("reader")
+        )
         self._v10_studio_widgets = {}
 
         self.removeDockWidget(self.navigation_dock)
@@ -1348,8 +1351,16 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
 
     def _on_v10_workspace_changed(self, workspace_id):
         if workspace_id == "reader":
+            self.v10_shell.set_focus_mode(False)
             self.v10_shell.set_workspace_widget(self.workspace_stack)
             return
+        if workspace_id == "focus":
+            self.v10_shell.set_workspace_widget(self.workspace_stack)
+            self.v10_shell.set_focus_mode(True)
+            if self.doc is not None:
+                QTimer.singleShot(0, self.fit_width)
+            return
+        self.v10_shell.set_focus_mode(False)
         landing = self._v10_studio_widgets.get(workspace_id)
         if landing is None:
             landing = StudioLanding(workspace_id, self.v10_shell)

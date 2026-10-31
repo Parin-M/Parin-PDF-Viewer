@@ -48,6 +48,7 @@ class ParinWorkspaceShell(QWidget):
     fitPageRequested = Signal()
     workspaceChanged = Signal(str)
     commandTriggered = Signal(str)
+    focusExitRequested = Signal()
 
     def __init__(
         self,
@@ -60,6 +61,7 @@ class ParinWorkspaceShell(QWidget):
         self.theme = ThemeEngine(theme_mode)
         self.metrics: LayoutMetrics = get_layout_metrics(density)
         self._active_workspace = "reader"
+        self._focus_mode = False
         self._workspace_widget: QWidget | None = None
         self._navigation_buttons: dict[str, QToolButton] = {}
         self.command_registry = CommandRegistry()
@@ -202,6 +204,10 @@ class ParinWorkspaceShell(QWidget):
         self.fit_page_button = self._tool_button("Fit Page", "context_action")
         self.fit_page_button.clicked.connect(self.fitPageRequested)
         row.addWidget(self.fit_page_button)
+        self.focus_exit_button = self._tool_button("Exit Focus", "context_action")
+        self.focus_exit_button.clicked.connect(self.focusExitRequested)
+        self.focus_exit_button.setVisible(False)
+        row.addWidget(self.focus_exit_button)
         return context
 
     def _build_main_area(self) -> QFrame:
@@ -412,7 +418,23 @@ class ParinWorkspaceShell(QWidget):
         self.status_strip.setVisible(bool(visible))
 
     def set_navigation_visible(self, visible: bool) -> None:
+        if self._focus_mode:
+            return
         self.navigation_panel.setVisible(bool(visible))
+
+    def set_focus_mode(self, enabled: bool) -> None:
+        """Toggle a distraction-reduced reader view without replacing the PDF."""
+        self._focus_mode = bool(enabled)
+        self.toolbar_frame.setVisible(not self._focus_mode)
+        self.focus_exit_button.setVisible(self._focus_mode)
+        if self._focus_mode:
+            self.navigation_panel.hide()
+            self.inspector_panel.hide()
+            return
+
+        width = self.width()
+        self.navigation_panel.setVisible(width >= self.metrics.narrow_breakpoint)
+        self.inspector_panel.setVisible(width >= self.metrics.compact_breakpoint)
 
     def set_document_status(self, text: str, page_text: str = "Page 0 of 0") -> None:
         self.document_status.setText(text)
@@ -433,6 +455,11 @@ class ParinWorkspaceShell(QWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         width = event.size().width()
+        if self._focus_mode:
+            self.toolbar_frame.setVisible(False)
+            self.navigation_panel.setVisible(False)
+            self.inspector_panel.setVisible(False)
+            return
         self.inspector_panel.setVisible(width >= self.metrics.compact_breakpoint)
         if width < self.metrics.narrow_breakpoint:
             self.navigation_panel.setVisible(False)

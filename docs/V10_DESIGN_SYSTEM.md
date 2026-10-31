@@ -42,3 +42,11 @@ operations.
 Focus Studio, Research Studio, Compare Studio and Document Hub currently show an
 explicit **IN DEVELOPMENT** state. Switching away from Reader Studio does not close
 or discard the open PDF; returning to Reader restores the existing reader widget.
+
+
+## Focus Studio
+
+Focus Studio is now a functional reader mode. It reuses the currently open PDF
+viewport, collapses the main action toolbar, navigation and inspector panels, and
+keeps the compact context strip with an explicit **Exit Focus** action. Returning
+to Reader Studio restores the responsive panels and the same document widget.
