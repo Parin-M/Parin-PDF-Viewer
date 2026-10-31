@@ -140,5 +140,43 @@ class WorkspaceShellTests(unittest.TestCase):
             shell.close()
 
 
+
+
+class LegacyCommandPaletteBridgeTests(unittest.TestCase):
+    def test_bridge_registers_available_viewer_actions(self):
+        from types import SimpleNamespace
+        from parin_ui.legacy_bridge import build_legacy_command_registry
+
+        called = []
+        viewer = SimpleNamespace(
+            open_file=lambda: called.append("open"),
+            save_file=lambda: called.append("save"),
+            toggle_tool=lambda tool: called.append(tool),
+        )
+        registry = build_legacy_command_registry(viewer)
+
+        self.assertIsNotNone(registry.get("file.open"))
+        self.assertIsNotNone(registry.get("file.save"))
+        self.assertIsNotNone(registry.get("annotation.pen"))
+        self.assertIsNone(registry.get("settings.open"))
+        registry.get("file.open").callback()
+        registry.get("annotation.pen").callback()
+        self.assertEqual(called, ["open", "pen"])
+
+    def test_bridge_does_not_register_duplicate_shortcut_records(self):
+        from types import SimpleNamespace
+        from parin_ui.legacy_bridge import build_legacy_command_registry
+
+        viewer = SimpleNamespace(
+            zoom_in=lambda: None,
+            zoom_out=lambda: None,
+            search_pdf=lambda: None,
+        )
+        registry = build_legacy_command_registry(viewer)
+        ids = [command.command_id for command in registry.all_commands()]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(registry.get("document.find").shortcut, "Ctrl+F")
+
+
 if __name__ == "__main__":
     unittest.main()
