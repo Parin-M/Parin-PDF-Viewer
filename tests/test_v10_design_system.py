@@ -929,5 +929,36 @@ class SettingsLocalizationTests(unittest.TestCase):
 
 
 
+class NavigationLocalizationTests(unittest.TestCase):
+    def test_navigation_locales_share_required_labels(self):
+        from parin_ui.navigation_i18n import NAVIGATION_I18N
+
+        required = {
+            "dock", "outline", "pages", "page", "nav_action",
+            "recent", "no_recent", "clear_recent", "no_outline",
+        }
+        self.assertIn("fa", NAVIGATION_I18N)
+        self.assertIn("de", NAVIGATION_I18N)
+        for language, labels in NAVIGATION_I18N.items():
+            with self.subTest(language=language):
+                self.assertTrue(required.issubset(labels))
+
+    def test_navigation_page_labels_preserve_page_number_placeholder(self):
+        from parin_ui.navigation_i18n import NAVIGATION_I18N
+
+        for language, labels in NAVIGATION_I18N.items():
+            with self.subTest(language=language):
+                self.assertIn("{n}", labels["page"])
+                self.assertEqual(labels["page"].format(n=7).count("7"), 1)
+
+    def test_navigation_localization_module_is_qt_independent(self):
+        from pathlib import Path
+
+        source = Path("src/parin_ui/navigation_i18n.py").read_text(encoding="utf-8")
+        self.assertNotIn("PySide6", source)
+        self.assertIn("NAVIGATION_I18N", source)
+
+
+
 if __name__ == "__main__":
     unittest.main()

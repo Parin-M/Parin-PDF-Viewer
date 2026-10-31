@@ -95,6 +95,12 @@ comparison responsive on very long or malformed pages, extracted text and displa
 diff output are bounded before presentation.
 
 
+### Navigation localization boundary
+
+The navigation panel's labels are stored in the Qt-independent
+`src/parin_ui/navigation_i18n.py`. The main viewer imports the data and keeps
+the existing language fallback and page-label formatting behavior.
+
 ### Settings module boundary
 
 The settings dialog UI lives in `src/parin_ui/settings_dialog.py`. Its language data and
