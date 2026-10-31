@@ -1,46 +1,5 @@
 # Parin PDF Viewer
 
-## Development branch: 9.2.0
-
-This branch contains development work for the next Parin PDF Viewer iteration. It is **not a published release** until the automated checks pass and the maintainer reviews the changes.
-
-### What is changing in 9.2
-
-- Everything from `feature/v9.0`, including page organization, undo/redo, safer loading/saving, navigation, search, recent files, session restoration, and full-document printing.
-- Redesign the welcome screen with Open PDF, recent-document cards and page-one previews, plus PDF drag-and-drop.
-- Use a minimalist navy-header workspace with monochrome toolbar glyphs, grouped actions, a refined navigation dock, a page/zoom/save status strip, and a neutral PDF canvas with optional page shadow.
-- Add a persistent Light/Dark appearance mode throughout the application and Settings; the PDF page content keeps its original colours.
-- Preserve the existing PDF features and localized interface while modernizing the surrounding controls.
-- Preview pen and highlighter strokes in real time and save the completed path to the PDF on release.
-- Use the optional offline Smart Ink assistant to smooth small writing jitters while preserving stroke endpoints and stronger direction changes; it does not upload document content or perform handwriting-to-text recognition.
-- Choose Sans serif, Serif or Monospace and a 6–72 pt font size before inserting text annotations.
-- Open local PDFs directly from the Linux file manager via the registered desktop handler, including `file://` URLs and uppercase `.PDF` extensions; a failed open leaves the current document intact.
-- Keep the PDF canvas at the rendered image's real dimensions; route wheel and touchpad events from the page, scroll area, and viewport consistently; continue across page boundaries after Qt finalizes the scroll range. Regression tests verify page pixels and viewport scrolling.
-- Preserve encrypted PDFs (including blank user-password files) on save, validate temporary output before replacement, and keep undo/redo snapshots consistent with encryption state.
-- Apply Fit Width, Fit Page and 100% settings reliably, and reset all settings widgets and values together.
-- Keep the viewer, PDF helpers, rendering workflow and zoom normalization entirely in Python; no Rust extension or Rust toolchain is required.
-- A localized About page under Settings, with the exact project credit, application version, GitHub repository, GPL-3.0 license, and a copy-version button.
-- A drag-and-drop page organizer to reorder, rotate, delete, and extract pages, plus insertion from another PDF.
-- Ctrl+Z / Ctrl+Y undo and redo for annotations and supported page operations, with bounded history to limit memory use.
-- CI regression tests and a Debian package artifact built by GitHub Actions.
-
-### Architecture
-
-The application is implemented in Python with PySide6 and PyMuPDF. Zoom handling, path management, settings, annotations, search, page navigation and packaging are pure Python. PyInstaller bundles the Python application and its runtime dependencies; building or running the project does not require Cargo, maturin or a Rust toolchain.
-
-### Development setup
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
-PYTHONPATH=src python -m unittest discover -s tests -v
-python -m compileall -q src tests
-```
-
-GitHub Actions builds the `.deb` file as `parin-pdf_9.2.0_amd64.deb` and uploads it as the `parin-pdf-9.2.0-deb` workflow artifact. The CI workflow uses Python tooling only; it does not install or invoke a Rust toolchain. To build locally on a compatible Debian-based system, follow scripts/build-deb.sh. GUI rendering and printing should still be smoke-tested on the target desktop before publishing a release. See CHANGELOG.md for details and known limitations.
-
----
 
 A PDF viewer that you can install on Debian and Debian Base OS
 
