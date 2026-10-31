@@ -1330,10 +1330,11 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self.removeDockWidget(self.navigation_dock)
         self.navigation_dock.hide()
 
-        legacy_central = self.centralWidget()
+        legacy_central = self.takeCentralWidget()
         self.setCentralWidget(self.v10_shell)
         self._legacy_central_widget = legacy_central
         if legacy_central is not None:
+            legacy_central.setParent(self)
             legacy_central.hide()
 
         self.v10_shell.commandTriggered.connect(self._on_v10_command_triggered)

@@ -27,3 +27,18 @@ This document describes the first implementation slice on `feature/v10-hybrid-pr
 The existing PDF renderer and document lifecycle remain in `parin_pdf_viewer.py` for this first slice. The new shell exposes `set_workspace_widget()` so the proven PDF viewport can be mounted into the central canvas after the next integration step. This keeps the renderer fixes isolated while the UI is modularized.
 
 The new shell is a component foundation; it does not replace the current application entry point yet.
+
+
+## Reader integration update
+
+The v10 workspace shell is now mounted as the main central widget of the application.
+The existing PDF welcome page, scroll area, toolbar actions, search field, settings and
+language controls are hosted inside the new shell rather than duplicated. The existing
+outline and page-thumbnail tabs are mounted in the left navigation panel. The right
+Inspector reports the open file, page count, current page, page dimensions, title,
+author, subject and save state, and exposes quick actions routed to the existing PDF
+operations.
+
+Focus Studio, Research Studio, Compare Studio and Document Hub currently show an
+explicit **IN DEVELOPMENT** state. Switching away from Reader Studio does not close
+or discard the open PDF; returning to Reader restores the existing reader widget.

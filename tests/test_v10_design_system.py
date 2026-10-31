@@ -232,7 +232,7 @@ class IntegratedV10ShellTests(unittest.TestCase):
                 self.assertIs(viewer.v10_shell._workspace_widget, viewer.workspace_stack)
                 self.assertIs(viewer.v10_shell.toolbar_frame, viewer.tool_area)
                 self.assertIs(viewer.reader_inspector.parent(), viewer.v10_shell.inspector_panel)
-                self.assertIs(viewer.v10_shell.active_workspace, "reader")
+                self.assertEqual(viewer.v10_shell.active_workspace, "reader")
                 self.assertIs(viewer.v10_shell.navigation_panel.layout().count() > 5, True)
             finally:
                 viewer.close()
