@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pymupdf as fitz
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -19,6 +18,11 @@ from PySide6.QtWidgets import (
 )
 
 from parin_pdf_helpers import ensure_pdf_extension, same_path
+from parin_ui.page_operations import (
+    apply_page_edit_plan,
+    create_page_edit_plan,
+    extract_pdf_pages,
+)
 
 
 class PageOrganizerDialog(QDialog):
@@ -78,54 +82,64 @@ class PageOrganizerDialog(QDialog):
 
     def extract_selected(self):
         selected = {item.data(Qt.UserRole) for item in self.pages.selectedItems()}
-        ordered = [self.pages.item(row).data(Qt.UserRole) for row in range(self.pages.count())
-                   if self.pages.item(row).data(Qt.UserRole) in selected]
+        ordered = [
+            self.pages.item(row).data(Qt.UserRole)
+            for row in range(self.pages.count())
+            if self.pages.item(row).data(Qt.UserRole) in selected
+        ]
         if not ordered:
             QMessageBox.information(self, "Extract pages", "Select at least one page first.")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "Extract pages to PDF", "extracted-pages.pdf", "PDF files (*.pdf)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Extract pages to PDF", "extracted-pages.pdf", "PDF files (*.pdf)"
+        )
         if not path:
             return
         path = ensure_pdf_extension(path)
         if self.viewer.file_path and same_path(path, self.viewer.file_path):
-            QMessageBox.warning(self, "Extract pages", "Choose a different file name so the open PDF is not overwritten.")
+            QMessageBox.warning(
+                self,
+                "Extract pages",
+                "Choose a different file name so the open PDF is not overwritten.",
+            )
             return
-        output = None
         try:
-            output = fitz.open()
-            for page_index in ordered:
-                output.insert_pdf(self.viewer.doc, from_page=page_index, to_page=page_index)
-            output.save(path)
-            QMessageBox.information(self, "Extract pages", f"Extracted {len(ordered)} page(s) to:\n{path}")
+            result = extract_pdf_pages(self.viewer.doc, ordered, path)
+            QMessageBox.information(
+                self,
+                "Extract pages",
+                f"Extracted {result.page_count} page(s) to:\n{result.file_path}",
+            )
         except Exception as exc:
             QMessageBox.critical(self, "Extract pages failed", str(exc))
-        finally:
-            if output is not None:
-                output.close()
 
     def apply_changes(self):
-        order = [self.pages.item(row).data(Qt.UserRole) for row in range(self.pages.count())]
-        if not order:
-            QMessageBox.warning(self, "Manage PDF pages", "A PDF must contain at least one page.")
+        order = [
+            self.pages.item(row).data(Qt.UserRole)
+            for row in range(self.pages.count())
+        ]
+        try:
+            plan = create_page_edit_plan(
+                self.viewer.doc.page_count,
+                order,
+                self.rotations,
+            )
+        except (TypeError, ValueError) as exc:
+            QMessageBox.warning(self, "Manage PDF pages", str(exc))
             return
-        if len(order) != len(set(order)):
-            QMessageBox.warning(self, "Manage PDF pages", "The page list is invalid; no changes were applied.")
-            return
-        original_order = list(range(self.viewer.doc.page_count))
-        included = set(order)
-        has_rotation = any(delta and page_index in included for page_index, delta in self.rotations.items())
-        if order == original_order and not has_rotation:
+        if not plan.has_changes:
             self.accept()
             return
+
         self.viewer._record_undo()
         old_current = self.viewer.current_page
         try:
-            for page_index, delta in self.rotations.items():
-                if delta and page_index in included:
-                    page = self.viewer.doc.load_page(page_index)
-                    page.set_rotation((page.rotation + delta) % 360)
-            self.viewer.doc.select(order)
-            self.viewer.current_page = order.index(old_current) if old_current in order else min(old_current, len(order) - 1)
+            apply_page_edit_plan(self.viewer.doc, plan)
+            self.viewer.current_page = (
+                plan.order.index(old_current)
+                if old_current in plan.order
+                else min(old_current, len(plan.order) - 1)
+            )
             self.viewer._after_document_structure_change()
             self.accept()
         except Exception as exc:

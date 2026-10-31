@@ -30,6 +30,7 @@ from parin_ui.research_store import ResearchStore
 from parin_ui.research_studio import ResearchStudio
 from parin_ui.compare_studio import CompareStudio
 from parin_ui.page_organizer import PageOrganizerDialog
+from parin_ui.page_operations import insert_pdf_pages
 from parin_ui.settings_dialog import SettingsDialog, SettingsDialogResources
 from parin_ui.settings_i18n import SETTINGS_I18N
 from parin_ui.navigation_i18n import NAVIGATION_I18N
@@ -1370,7 +1371,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self._record_undo()
             insert_at = self.current_page + 1
             inserted_count = source.page_count
-            self.doc.insert_pdf(source, start_at=insert_at)
+            inserted_count = insert_pdf_pages(self.doc, source, start_at=insert_at)
             self.current_page = insert_at
             self._after_document_structure_change()
             self.statusBar().showMessage(f"Inserted {inserted_count} page(s) from {Path(source_path).name}", 6000)

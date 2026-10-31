@@ -149,3 +149,14 @@ the validated open document and its encryption/page metadata. The Reader owns
 the UI handoff, closes the previous in-memory document after success, updates
 reading state, and copies local Research notes for Save As. Failed writes do
 not close or mutate the current source document.
+
+
+### PDF page operations service
+
+Page-plan validation, page ordering/removal/rotation, PDF-to-PDF insertion and
+page extraction are now owned by the Qt-free
+`src/parin_ui/page_operations.py`. The Page Organizer remains responsible for
+the list and dialogs, but submits a validated plan to the service. Extraction
+writes through the transactional save service, so an existing destination is
+replaced only after the extracted PDF has been reopened and validated. The
+Reader continues to own undo checkpoints, active-page selection and UI refresh.
