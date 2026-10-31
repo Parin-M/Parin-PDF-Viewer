@@ -24,9 +24,11 @@ This document describes the first implementation slice on `feature/v10-hybrid-pr
 
 ## Migration boundary
 
-The existing PDF renderer and document lifecycle remain in `parin_pdf_viewer.py` for this first slice. The new shell exposes `set_workspace_widget()` so the proven PDF viewport can be mounted into the central canvas after the next integration step. This keeps the renderer fixes isolated while the UI is modularized.
-
-The new shell is a component foundation; it does not replace the current application entry point yet.
+The v10 shell is now the main application window and hosts the existing PDF reader,
+toolbar, navigation tabs, welcome page, settings and language controls. The proven
+PDF renderer and document lifecycle remain in `parin_pdf_viewer.py`; the new workspaces
+are separate modules mounted into the central workspace. This incremental boundary
+keeps the renderer fixes isolated while the remaining legacy services are migrated.
 
 
 ## Reader integration update

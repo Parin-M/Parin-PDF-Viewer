@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QInputDialog,
+    QLineEdit,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -50,8 +51,8 @@ _LABELS = {
     "fa": {
         "title": "محیط مقایسه",
         "subtitle": "دو فایل PDF محلی را کنار هم بررسی کنید؛ هر سند مستقل باقی می‌ماند.",
-        "left": "سند سمت راست",
-        "right": "سند سمت چپ",
+        "left": "سند سمت چپ",
+        "right": "سند سمت راست",
         "open": "باز کردن PDF",
         "page": "صفحه",
         "sync": "همگام‌سازی صفحات",
@@ -196,6 +197,7 @@ class ComparePane(QWidget):
                             self,
                             labels["password"],
                             labels["enter_password"],
+                            QLineEdit.EchoMode.Password,
                         )
                         if not accepted:
                             candidate.close()
@@ -206,12 +208,27 @@ class ComparePane(QWidget):
             if candidate.page_count < 1:
                 raise ValueError(_LABELS[self._language]["invalid"])
             page = candidate.load_page(0)
+            page_width = max(1.0, float(page.rect.width))
+            page_height = max(1.0, float(page.rect.height))
+            preflight_scale = min(
+                0.2,
+                _MAX_RENDER_DIMENSION / max(page_width, page_height),
+                (_MAX_RENDER_PIXELS / (page_width * page_height)) ** 0.5,
+            )
             pix = page.get_pixmap(
-                matrix=fitz.Matrix(0.2, 0.2),
+                matrix=fitz.Matrix(preflight_scale, preflight_scale),
                 colorspace=fitz.csRGB,
                 alpha=False,
             )
-            if pix.width < 1 or pix.height < 1 or pix.n != 3:
+            if (
+                pix.width < 1
+                or pix.height < 1
+                or pix.width > _MAX_RENDER_DIMENSION
+                or pix.height > _MAX_RENDER_DIMENSION
+                or pix.width * pix.height > _MAX_RENDER_PIXELS
+                or pix.n != 3
+                or len(pix.samples) < pix.stride * pix.height
+            ):
                 raise ValueError(_LABELS[self._language]["invalid"])
 
             previous = self.document

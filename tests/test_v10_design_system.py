@@ -547,6 +547,27 @@ class CompareStudioTests(unittest.TestCase):
                 studio.close_documents()
                 studio.close()
 
+    def test_previews_are_rendered_for_both_loaded_documents(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.compare_studio import CompareStudio
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            left = root / "left.pdf"
+            right = root / "right.pdf"
+            self._make_pdf(left, 1)
+            self._make_pdf(right, 1)
+            studio = CompareStudio()
+            try:
+                self.assertTrue(studio.load_document("left", str(left), report_errors=False))
+                self.assertTrue(studio.load_document("right", str(right), report_errors=False))
+                self.assertIsNotNone(studio.left_pane.page_image.pixmap())
+                self.assertIsNotNone(studio.right_pane.page_image.pixmap())
+            finally:
+                studio.close_documents()
+                studio.close()
+
     def test_sync_can_be_disabled_and_reenabled(self):
         import tempfile
         from pathlib import Path
