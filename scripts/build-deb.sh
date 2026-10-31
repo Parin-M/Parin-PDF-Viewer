@@ -1,9 +1,10 @@
 #!/bin/bash
 set -euo pipefail
-VERSION="9.2.0"
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+# Keep Debian metadata and output filenames aligned with the application.
+VERSION="$(PYTHONPATH="$ROOT/src" python -c 'from parin_pdf_helpers import APP_VERSION; print(APP_VERSION)')"
 
 if [[ ! -d ".venv" ]]; then
   echo "ERROR: .venv not found."

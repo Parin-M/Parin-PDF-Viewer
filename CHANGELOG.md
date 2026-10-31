@@ -1,5 +1,12 @@
 # Changelog
 
+## 10.0.0 — Hybrid Pro workspace and modular PDF services
+
+- Promote the application identity and Debian package to version 10.0.0.
+- Introduce the Hybrid Pro workspace shell with Reader, Focus, Research, Compare and Document Hub workspaces.
+- Extract PDF opening, transactional saving, page editing, annotations and text search into Qt-independent services.
+- Align the application title, Settings About page, Debian package metadata and CI artifact name with the central application version.
+
 ## 9.2.0 — Python-only core and interface refresh
 
 - Remove the PyO3/Rust extension and the entire `rust-core` project; all runtime helpers are implemented directly in Python.

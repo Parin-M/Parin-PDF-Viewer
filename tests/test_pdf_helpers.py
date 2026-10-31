@@ -73,8 +73,13 @@ class ZoomTests(unittest.TestCase):
 
 
 class VersionTests(unittest.TestCase):
-    def test_version_is_920(self):
-        self.assertEqual(APP_VERSION, "9.2.0")
+    def test_application_version_is_1000(self):
+        self.assertEqual(APP_VERSION, "10.0.0")
+
+    def test_debian_build_reads_the_application_version(self):
+        root = Path(__file__).resolve().parents[1]
+        script = (root / "scripts" / "build-deb.sh").read_text(encoding="utf-8")
+        self.assertIn("from parin_pdf_helpers import APP_VERSION", script)
 
 
 
