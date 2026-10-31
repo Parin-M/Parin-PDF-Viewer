@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import difflib
+import math
 import os
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLineEdit,
     QLabel,
+    QPlainTextEdit,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -38,6 +41,11 @@ _LABELS = {
         "open": "Open PDF",
         "page": "Page",
         "sync": "Synchronize pages",
+        "compare_text": "Compare page text",
+        "need_both": "Load a PDF in both panes to compare text.",
+        "no_diff": "No text differences found on this page.",
+        "diff_counts": "{added} added · {removed} removed",
+        "diff_truncated": "Text was shortened before comparison.",
         "empty": "Open a PDF to compare",
         "no_document": "No document loaded",
         "ready": "Ready",
@@ -56,6 +64,11 @@ _LABELS = {
         "open": "باز کردن PDF",
         "page": "صفحه",
         "sync": "همگام‌سازی صفحات",
+        "compare_text": "مقایسهٔ متن صفحه",
+        "need_both": "برای مقایسهٔ متن، هر دو سند را بارگذاری کنید.",
+        "no_diff": "در متن این صفحه تفاوتی پیدا نشد.",
+        "diff_counts": "{added} مورد اضافه · {removed} مورد حذف",
+        "diff_truncated": "بخشی از متن پیش از مقایسه کوتاه شد.",
         "empty": "برای مقایسه، یک PDF باز کنید",
         "no_document": "سندی بارگذاری نشده است",
         "ready": "آماده",
@@ -74,6 +87,11 @@ _LABELS = {
         "open": "PDF öffnen",
         "page": "Seite",
         "sync": "Seiten synchronisieren",
+        "compare_text": "Seitentext vergleichen",
+        "need_both": "Zum Textvergleich beide PDFs laden.",
+        "no_diff": "Auf dieser Seite wurden keine Textunterschiede gefunden.",
+        "diff_counts": "{added} hinzugefügt · {removed} entfernt",
+        "diff_truncated": "Der Text wurde vor dem Vergleich gekürzt.",
         "empty": "PDF zum Vergleichen öffnen",
         "no_document": "Kein Dokument geladen",
         "ready": "Bereit",
@@ -295,7 +313,8 @@ class ComparePane(QWidget):
                 _MAX_RENDER_DIMENSION / max(width, height),
                 (_MAX_RENDER_PIXELS / (width * height)) ** 0.5,
             )
-            scale = max(0.05, scale)
+            if not math.isfinite(scale) or scale <= 0:
+                raise RuntimeError("The PDF page has invalid dimensions.")
             pix = page.get_pixmap(
                 matrix=fitz.Matrix(scale, scale),
                 colorspace=fitz.csRGB,
@@ -378,6 +397,9 @@ class CompareStudio(QWidget):
         intro.addWidget(self.heading)
         intro.addWidget(self.subtitle)
         top.addLayout(intro, 1)
+        self.compare_text_button = QPushButton()
+        self.compare_text_button.clicked.connect(self.compare_current_page_text)
+        top.addWidget(self.compare_text_button)
         self.sync_checkbox = QCheckBox()
         self.sync_checkbox.setChecked(True)
         self.sync_checkbox.toggled.connect(self._set_sync_enabled)
@@ -398,6 +420,15 @@ class CompareStudio(QWidget):
         self.status_label = QLabel()
         self.status_label.setProperty("role", "muted")
         root.addWidget(self.status_label)
+        self.diff_summary = QLabel()
+        self.diff_summary.setProperty("role", "muted")
+        root.addWidget(self.diff_summary)
+        self.diff_editor = QPlainTextEdit(self)
+        self.diff_editor.setReadOnly(True)
+        self.diff_editor.setMaximumHeight(160)
+        self.diff_editor.setObjectName("compare_text_diff")
+        self.diff_editor.hide()
+        root.addWidget(self.diff_editor)
 
         self.left_pane.pageChanged.connect(
             lambda page: self._on_page_changed("left", page)
@@ -419,6 +450,7 @@ class CompareStudio(QWidget):
         self.heading.setText(labels["title"])
         self.subtitle.setText(labels["subtitle"])
         self.sync_checkbox.setText(labels["sync"])
+        self.compare_text_button.setText(labels["compare_text"])
         self.left_pane.set_language(self._language)
         self.right_pane.set_language(self._language)
         self._update_status()
@@ -473,6 +505,67 @@ class CompareStudio(QWidget):
         self.status_label.setText(
             f"{labels['left']}: {left}    ·    {labels['right']}: {right}"
         )
+        self.compare_text_button.setEnabled(bool(left and right))
+
+    def compare_current_page_text(self) -> bool:
+        """Render a bounded unified diff for the two currently selected pages."""
+        labels = _LABELS[self._language]
+        if self.left_pane.document is None or self.right_pane.document is None:
+            self.diff_editor.setPlainText(labels["need_both"])
+            self.diff_editor.show()
+            self.diff_summary.setText("")
+            return False
+        try:
+            left_page = self.left_pane.document.load_page(self.left_pane.current_page - 1)
+            right_page = self.right_pane.document.load_page(self.right_pane.current_page - 1)
+            left_text = left_page.get_text("text")
+            right_text = right_page.get_text("text")
+            max_chars = 120_000
+            max_lines = 1_500
+            truncated = len(left_text) > max_chars or len(right_text) > max_chars
+            left_lines = left_text[:max_chars].splitlines()[:max_lines]
+            right_lines = right_text[:max_chars].splitlines()[:max_lines]
+            if len(left_text.splitlines()) > max_lines or len(right_text.splitlines()) > max_lines:
+                truncated = True
+
+            diff_lines = list(
+                difflib.unified_diff(
+                    left_lines,
+                    right_lines,
+                    fromfile=f"Left · page {self.left_pane.current_page}",
+                    tofile=f"Right · page {self.right_pane.current_page}",
+                    lineterm="",
+                    n=2,
+                )
+            )
+            added = sum(
+                1 for line in diff_lines
+                if line.startswith("+") and not line.startswith("+++")
+            )
+            removed = sum(
+                1 for line in diff_lines
+                if line.startswith("-") and not line.startswith("---")
+            )
+            if not diff_lines:
+                output = labels["no_diff"]
+                summary = labels["no_diff"]
+            else:
+                output = "\n".join(diff_lines[:400])
+                if len(diff_lines) > 400:
+                    output += "\n…"
+                    truncated = True
+                summary = labels["diff_counts"].format(added=added, removed=removed)
+            if truncated:
+                output += "\n\n" + labels["diff_truncated"]
+            self.diff_editor.setPlainText(output)
+            self.diff_summary.setText(summary)
+            self.diff_editor.show()
+            return True
+        except Exception as exc:
+            self.diff_editor.setPlainText(str(exc))
+            self.diff_summary.setText(labels["render_error"])
+            self.diff_editor.show()
+            return False
 
     def close_documents(self) -> None:
         self.left_pane.close_document()

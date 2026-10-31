@@ -592,6 +592,65 @@ class CompareStudioTests(unittest.TestCase):
                 studio.close_documents()
                 studio.close()
 
+    def test_page_text_diff_reports_additions_and_removals(self):
+        import tempfile
+        from pathlib import Path
+        import pymupdf as fitz
+        from parin_ui.compare_studio import CompareStudio
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            left = root / "left.pdf"
+            right = root / "right.pdf"
+            left_doc = fitz.open()
+            left_page = left_doc.new_page()
+            left_page.insert_text((72, 72), "Shared statement")
+            left_page.insert_text((72, 100), "Old wording")
+            left_doc.save(str(left))
+            left_doc.close()
+
+            right_doc = fitz.open()
+            right_page = right_doc.new_page()
+            right_page.insert_text((72, 72), "Shared statement")
+            right_page.insert_text((72, 100), "New wording")
+            right_doc.save(str(right))
+            right_doc.close()
+
+            studio = CompareStudio()
+            try:
+                self.assertTrue(studio.load_document("left", str(left), report_errors=False))
+                self.assertTrue(studio.load_document("right", str(right), report_errors=False))
+                self.assertTrue(studio.compare_current_page_text())
+                output = studio.diff_editor.toPlainText()
+                self.assertIn("-Old wording", output)
+                self.assertIn("+New wording", output)
+                self.assertIn("1 added", studio.diff_summary.text())
+                self.assertIn("1 removed", studio.diff_summary.text())
+            finally:
+                studio.close_documents()
+                studio.close()
+
+    def test_equal_page_text_has_explicit_no_difference_state(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.compare_studio import CompareStudio
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            left = root / "left.pdf"
+            right = root / "right.pdf"
+            self._make_pdf(left, 1)
+            self._make_pdf(right, 1)
+            studio = CompareStudio()
+            try:
+                studio.load_document("left", str(left), report_errors=False)
+                studio.load_document("right", str(right), report_errors=False)
+                self.assertTrue(studio.compare_current_page_text())
+                self.assertIn("No text differences", studio.diff_summary.text())
+            finally:
+                studio.close_documents()
+                studio.close()
+
     def test_failed_replacement_preserves_loaded_document(self):
         import tempfile
         from pathlib import Path

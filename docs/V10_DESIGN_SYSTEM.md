@@ -84,3 +84,11 @@ selector. Page synchronization is enabled by default and can be switched off;
 when enabled, page numbers are matched and clamped to the available range of
 the other document. Closing the main application releases both comparison
 documents. Compare mode is read-only and does not modify either PDF.
+
+
+### Page text comparison
+
+The comparison toolbar also offers a read-only unified text diff for the currently
+selected pages. Added and removed lines are counted and shown with context. To keep
+comparison responsive on very long or malformed pages, extracted text and displayed
+diff output are bounded before presentation.
