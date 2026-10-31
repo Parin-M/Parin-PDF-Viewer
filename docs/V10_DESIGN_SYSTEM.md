@@ -125,3 +125,14 @@ checkpoint-count bounds, clears redo history after a new edit, and only advances
 history stacks after the Reader confirms a snapshot restore. PDF serialization,
 encryption handling and UI refresh remain at the main-reader boundary.
 
+
+
+### PDF document service
+
+PDF opening and validation are now isolated in the Qt-free
+`src/parin_ui/document_service.py`. It normalizes and checks the input path,
+opens a candidate, handles password authentication outcomes, verifies that at
+least one page is readable, and rasterizes a bounded page-one sample. Failed
+candidates are closed by the service. The Reader retains the password prompt,
+unsaved-change decision and final active-document replacement, so an invalid,
+locked or cancelled candidate cannot displace the currently open PDF.

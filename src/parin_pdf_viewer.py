@@ -34,26 +34,17 @@ from parin_ui.settings_dialog import SettingsDialog, SettingsDialogResources
 from parin_ui.settings_i18n import SETTINGS_I18N
 from parin_ui.navigation_i18n import NAVIGATION_I18N
 from parin_ui.document_history import DocumentHistory
+from parin_ui.document_service import (
+    IncorrectPasswordError,
+    PasswordRequiredError,
+    is_document_encrypted as _is_document_encrypted,
+    open_pdf_document,
+    preflight_pdf_page,
+)
 from parin_ui.navigation_panel import NavigationPanelController
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
-def _is_document_encrypted(document):
-    """Detect PDF encryption even after PyMuPDF auto-authenticates an empty password."""
-    if document is None or getattr(document, "is_closed", False):
-        return False
-    try:
-        encryption = (document.metadata or {}).get("encryption")
-        if encryption and str(encryption).strip().lower() not in ("none", "null"):
-            return True
-    except Exception:
-        pass
-    try:
-        return bool(document.is_encrypted)
-    except Exception:
-        return False
-
-
 def clean_label(value):
     if not isinstance(value, str):
         return value
@@ -1539,16 +1530,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
 
     @staticmethod
     def _preflight_pdf_page(document, page_index=0):
-        """Verify a candidate PDF can rasterize before replacing the current document."""
-        page = document.load_page(page_index)
-        width = max(1.0, float(page.rect.width))
-        height = max(1.0, float(page.rect.height))
-        scale = min(0.25, MAX_PDF_RENDER_DIMENSION / max(width, height), math.sqrt(1_000_000 / (width * height)))
-        if scale <= 0:
-            raise RuntimeError("The PDF page has invalid dimensions.")
-        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csRGB, alpha=False)
-        if pix.width < 1 or pix.height < 1 or pix.n != 3 or len(pix.samples) < pix.stride * pix.height:
-            raise RuntimeError("The PDF renderer returned an invalid page image.")
+        """Compatibility wrapper for the extracted PDF validation service."""
+        return preflight_pdf_page(document, page_index)
 
     def open_file(self, selected_path=None, restore_session=False):
         file_path = selected_path
@@ -1557,40 +1540,37 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         if not file_path:
             return
         candidate = None
-        document_encrypted = False
         try:
-            file_path = os.path.abspath(os.path.expanduser(file_path))
-            if not os.path.isfile(file_path):
-                raise FileNotFoundError(f"File does not exist: {file_path}")
-            file_size = os.path.getsize(file_path)
-            candidate = fitz.open(file_path)
-            document_encrypted = _is_document_encrypted(candidate)
-            password = ""
-            if document_encrypted and getattr(candidate, "needs_pass", False):
-                # Some encrypted PDFs intentionally use an empty user password.
-                if not candidate.authenticate(""):
-                    while True:
-                        pwd, ok = QInputDialog.getText(
-                            self, "Unlock PDF",
-                            TRANSLATIONS[self.current_lang]["enter_pass"],
-                            QLineEdit.Password,
-                        )
-                        if not ok:
-                            candidate.close()
-                            return
-                        if candidate.authenticate(pwd):
-                            password = pwd
-                            break
-                        QMessageBox.warning(
-                            self, "Cannot open PDF",
-                            TRANSLATIONS[self.current_lang]["wrong_pass"],
-                        )
-            if candidate.page_count < 1:
-                raise ValueError("The PDF contains no readable pages.")
-            self._preflight_pdf_page(candidate, 0)
+            password = None
+            while True:
+                try:
+                    opened = open_pdf_document(file_path, password=password)
+                    break
+                except PasswordRequiredError:
+                    pwd, ok = QInputDialog.getText(
+                        self, "Unlock PDF",
+                        TRANSLATIONS[self.current_lang]["enter_pass"],
+                        QLineEdit.Password,
+                    )
+                    if not ok:
+                        return
+                    password = pwd
+                except IncorrectPasswordError:
+                    QMessageBox.warning(
+                        self, "Cannot open PDF",
+                        TRANSLATIONS[self.current_lang]["wrong_pass"],
+                    )
+                    password = None
+
+            candidate = opened.document
+            file_path = opened.file_path
+            file_size = opened.file_size
+            document_encrypted = opened.encrypted
+            password = opened.password
             if not self._confirm_unsaved_changes():
                 candidate.close()
                 return
+
             previous_doc = self.doc
             self.document_history.reset()
             self.doc = candidate
@@ -1631,7 +1611,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self._last_search_rect_index = -1
             self.search_highlight = None
             self._refresh_navigation()
-            if hasattr(self,'workspace_stack'):
+            if hasattr(self, "workspace_stack"):
                 self.workspace_stack.setCurrentWidget(self.scroll_area)
             if (
                 hasattr(self, "v10_shell")
