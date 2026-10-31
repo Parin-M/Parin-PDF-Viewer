@@ -80,14 +80,20 @@ class ParinWorkspaceShell(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
+        self._root_layout = root
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        root.addWidget(self._build_header())
-        root.addWidget(self._build_toolbar())
-        root.addWidget(self._build_context_toolbar())
-        root.addWidget(self._build_main_area(), 1)
-        root.addWidget(self._build_status_bar())
+        self.header_frame = self._build_header()
+        self.toolbar_frame = self._build_toolbar()
+        self.context_toolbar_frame = self._build_context_toolbar()
+        self.main_area = self._build_main_area()
+        self.status_strip = self._build_status_bar()
+        root.addWidget(self.header_frame)
+        root.addWidget(self.toolbar_frame)
+        root.addWidget(self.context_toolbar_frame)
+        root.addWidget(self.main_area, 1)
+        root.addWidget(self.status_strip)
 
     def _build_header(self) -> QFrame:
         header = QFrame(self)
@@ -96,6 +102,7 @@ class ParinWorkspaceShell(QWidget):
         row = QHBoxLayout(header)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(10)
+        self._header_layout = row
 
         brand = QLabel("P", header)
         brand.setObjectName("brand_mark")
@@ -234,6 +241,7 @@ class ParinWorkspaceShell(QWidget):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(10, 14, 10, 12)
         layout.setSpacing(5)
+        self._navigation_layout = layout
 
         heading = QLabel("WORKSPACES", panel)
         heading.setProperty("role", "muted")
@@ -263,6 +271,7 @@ class ParinWorkspaceShell(QWidget):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(14, 14, 14, 12)
         layout.setSpacing(8)
+        self._inspector_layout = layout
 
         heading = QLabel("INSPECTOR", panel)
         heading.setProperty("role", "muted")
@@ -352,6 +361,59 @@ class ParinWorkspaceShell(QWidget):
         self.workspace_stack.addWidget(widget)
         self.workspace_stack.setCurrentWidget(widget)
 
+    def set_toolbar_widget(self, widget: QWidget) -> None:
+        """Replace the starter toolbar with the viewer's complete action row."""
+        if widget is self.toolbar_frame:
+            return
+        index = self._root_layout.indexOf(self.toolbar_frame)
+        self.toolbar_frame.setParent(None)
+        self.toolbar_frame.deleteLater()
+        self.toolbar_frame = widget
+        widget.setParent(self)
+        self._root_layout.insertWidget(max(0, index), widget)
+
+    def set_header_accessories(self, widgets: list[QWidget]) -> None:
+        """Place existing search/settings/language controls in the v10 header."""
+        for widget in widgets:
+            if widget is None:
+                continue
+            widget.setParent(self.header_frame)
+            self._header_layout.insertWidget(max(0, self._header_layout.count() - 1), widget)
+
+    def set_navigation_content(self, widget: QWidget) -> None:
+        """Mount the existing PDF outline and page thumbnails below workspace links."""
+        if widget.parent() is self.navigation_panel:
+            return
+        widget.setParent(self.navigation_panel)
+        self._navigation_layout.insertWidget(max(0, self._navigation_layout.count() - 1), widget, 1)
+
+    def set_inspector_widget(self, widget: QWidget) -> None:
+        """Replace the starter inspector text with a live document inspector."""
+        while self._inspector_layout.count() > 1:
+            item = self._inspector_layout.takeAt(1)
+            old_widget = item.widget()
+            if old_widget is not None:
+                old_widget.setParent(None)
+                old_widget.deleteLater()
+        widget.setParent(self.inspector_panel)
+        self._inspector_layout.insertWidget(1, widget, 1)
+
+    def set_command_palette_callback(self, callback) -> None:
+        """Route header palette requests through the active application's registry."""
+        try:
+            self.command_button.clicked.disconnect()
+        except (TypeError, RuntimeError):
+            pass
+        self.command_button.clicked.connect(callback)
+        self._command_action.setShortcut(QKeySequence())
+
+    def set_status_strip_visible(self, visible: bool) -> None:
+        """Allow a QMainWindow status bar to remain the single status surface."""
+        self.status_strip.setVisible(bool(visible))
+
+    def set_navigation_visible(self, visible: bool) -> None:
+        self.navigation_panel.setVisible(bool(visible))
+
     def set_document_status(self, text: str, page_text: str = "Page 0 of 0") -> None:
         self.document_status.setText(text)
         self.page_status.setText(page_text)
@@ -372,4 +434,7 @@ class ParinWorkspaceShell(QWidget):
         super().resizeEvent(event)
         width = event.size().width()
         self.inspector_panel.setVisible(width >= self.metrics.compact_breakpoint)
-        self.navigation_panel.setVisible(width >= self.metrics.narrow_breakpoint)
+        if width < self.metrics.narrow_breakpoint:
+            self.navigation_panel.setVisible(False)
+        elif not self.navigation_panel.isHidden():
+            self.navigation_panel.setVisible(True)

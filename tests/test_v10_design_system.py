@@ -178,5 +178,73 @@ class LegacyCommandPaletteBridgeTests(unittest.TestCase):
         self.assertEqual(registry.get("document.find").shortcut, "Ctrl+F")
 
 
+
+
+class ReaderInspectorTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_inspector_shows_document_metadata_and_page_dimensions(self):
+        from types import SimpleNamespace
+        from parin_ui.reader_inspector import ReaderInspector
+
+        class FakeDocument:
+            page_count = 12
+            metadata = {"title": "Quarterly report", "author": "Parin", "subject": "Finance"}
+
+            def load_page(self, index):
+                return SimpleNamespace(rect=SimpleNamespace(width=595.0, height=842.0))
+
+        inspector = ReaderInspector()
+        inspector.update_document(FakeDocument(), "/tmp/report.pdf", 4, 1.25, True)
+        self.assertEqual(inspector.file_name.text(), "report.pdf")
+        self.assertEqual(inspector.pages_value.text(), "12")
+        self.assertEqual(inspector.page_value.text(), "5 / 12")
+        self.assertEqual(inspector.size_value.text(), "595 × 842 pt")
+        self.assertEqual(inspector.title_value.text(), "Quarterly report")
+        self.assertEqual(inspector.author_value.text(), "Parin")
+        self.assertTrue(inspector.find_button.isEnabled())
+
+    def test_inspector_localizes_and_clears_document(self):
+        from parin_ui.reader_inspector import ReaderInspector
+
+        inspector = ReaderInspector()
+        inspector.set_language("fa")
+        self.assertEqual(inspector.document_heading.text(), "مشخصات سند")
+        self.assertEqual(inspector.file_name.text(), "سندی باز نیست")
+        self.assertFalse(inspector.find_button.isEnabled())
+
+
+class IntegratedV10ShellTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_main_viewer_hosts_existing_reader_in_v10_shell(self):
+        from unittest.mock import patch
+        from parin_pdf_viewer import ParinPDFViewer
+
+        with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+            viewer = ParinPDFViewer()
+            try:
+                self.assertIs(viewer.centralWidget(), viewer.v10_shell)
+                self.assertIs(viewer.v10_shell._workspace_widget, viewer.workspace_stack)
+                self.assertIs(viewer.v10_shell.toolbar_frame, viewer.tool_area)
+                self.assertIs(viewer.reader_inspector.parent(), viewer.v10_shell.inspector_panel)
+                self.assertIs(viewer.v10_shell.active_workspace, "reader")
+                self.assertIs(viewer.v10_shell.navigation_panel.layout().count() > 5, True)
+            finally:
+                viewer.close()
+                self.app.processEvents()
+
+    def test_future_studios_are_clearly_marked_as_in_development(self):
+        from parin_ui.studio_pages import StudioLanding
+
+        page = StudioLanding("research")
+        self.assertEqual(page.workspace_id, "research")
+        self.assertEqual(page.status.text(), "IN DEVELOPMENT")
+
+
 if __name__ == "__main__":
     unittest.main()

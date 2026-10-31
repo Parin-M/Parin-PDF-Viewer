@@ -22,7 +22,10 @@ from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_fil
 from parin_handwriting_assist import SmartInkAssistant
 from parin_ui.command_palette import CommandPaletteDialog
 from parin_ui.legacy_bridge import build_legacy_command_registry
+from parin_ui.reader_inspector import ReaderInspector
+from parin_ui.studio_pages import StudioLanding
 from parin_ui.theme_engine import ThemeEngine
+from parin_ui.workspace_shell import ParinWorkspaceShell
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -1111,6 +1114,8 @@ QDialog{{background:{dialog_bg};}}
 QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px solid {border};border-radius:7px;padding:6px 9px;}}
 '''
         self.setStyleSheet(base+common)
+        if hasattr(self, "v10_shell"):
+            self.v10_shell.set_theme_mode("dark" if dark else "light")
         if hasattr(self, "header"):
             # Keep the brand/header surface dark in both appearance modes.
             # Applying this directly avoids inherited QWidget surface rules
@@ -1289,6 +1294,66 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self.statusBar().addPermanentWidget(self.status_dirty)
         self.setWindowIcon(make_app_icon(64))
         self._build_navigation_dock()
+        self._install_v10_workspace_shell()
+
+    def _install_v10_workspace_shell(self):
+        """Host the proven reader and navigation widgets inside the v10 shell."""
+        self.v10_shell = ParinWorkspaceShell(
+            theme_mode=self.app_settings.get("appearance_mode", "light"),
+            density="high",
+            parent=self,
+        )
+        self.v10_shell.set_toolbar_widget(self.tool_area)
+        self.v10_shell.set_workspace_widget(self.workspace_stack)
+        self.v10_shell.set_header_accessories([
+            self.quick_search,
+            self.btn_navigation,
+            self.btn_settings,
+            self.btn_lang,
+        ])
+        self.v10_shell.set_navigation_content(self.navigation_tabs)
+        self.v10_shell.set_status_strip_visible(False)
+        self.v10_shell.set_command_palette_callback(self.open_command_palette)
+
+        self.reader_inspector = ReaderInspector(self.v10_shell)
+        self.v10_shell.set_inspector_widget(self.reader_inspector)
+        self.reader_inspector.findRequested.connect(self.search_pdf)
+        self.reader_inspector.rotateLeftRequested.connect(lambda: self.rotate(-90))
+        self.reader_inspector.rotateRightRequested.connect(lambda: self.rotate(90))
+        self.reader_inspector.fitWidthRequested.connect(self.fit_width)
+        self.reader_inspector.fitPageRequested.connect(self.fit_page)
+        self.v10_shell.fit_width_button.clicked.connect(self.fit_width)
+        self.v10_shell.fit_page_button.clicked.connect(self.fit_page)
+        self.v10_shell.workspaceChanged.connect(self._on_v10_workspace_changed)
+        self._v10_studio_widgets = {}
+
+        self.removeDockWidget(self.navigation_dock)
+        self.navigation_dock.hide()
+
+        legacy_central = self.centralWidget()
+        self.setCentralWidget(self.v10_shell)
+        self._legacy_central_widget = legacy_central
+        if legacy_central is not None:
+            legacy_central.hide()
+
+        self.v10_shell.commandTriggered.connect(self._on_v10_command_triggered)
+        self._on_v10_workspace_changed("reader")
+
+    def _on_v10_command_triggered(self, command_id):
+        if command_id.startswith("workspace."):
+            self.statusBar().showMessage(
+                f"Workspace: {self.v10_shell.workspace_title.text()}", 2500
+            )
+
+    def _on_v10_workspace_changed(self, workspace_id):
+        if workspace_id == "reader":
+            self.v10_shell.set_workspace_widget(self.workspace_stack)
+            return
+        landing = self._v10_studio_widgets.get(workspace_id)
+        if landing is None:
+            landing = StudioLanding(workspace_id, self.v10_shell)
+            self._v10_studio_widgets[workspace_id] = landing
+        self.v10_shell.set_workspace_widget(landing)
 
     def _build_welcome_page(self):
         page_layout=QVBoxLayout(self.welcome_page)
@@ -1490,6 +1555,12 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self._refresh_navigation()
 
     def toggle_navigation_panel(self):
+        if hasattr(self, "v10_shell"):
+            visible = not self.v10_shell.navigation_panel.isVisible()
+            self.v10_shell.set_navigation_visible(visible)
+            if visible:
+                self._refresh_navigation()
+            return
         self.navigation_dock.setVisible(not self.navigation_dock.isVisible())
         if self.navigation_dock.isVisible():
             self._refresh_navigation()
@@ -1506,7 +1577,12 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
     def _refresh_navigation(self):
         if not hasattr(self, "page_list"):
             return
-        if hasattr(self, "navigation_dock") and not self.navigation_dock.isVisible():
+        navigation_visible = (
+            self.v10_shell.navigation_panel.isVisible()
+            if hasattr(self, "v10_shell")
+            else self.navigation_dock.isVisible()
+        )
+        if not navigation_visible:
             self._navigation_needs_refresh = True
             return
         self._navigation_needs_refresh = False
@@ -1557,7 +1633,12 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
     def _load_visible_thumbnails(self):
         if not self.doc or not hasattr(self, "page_list") or self.page_list.count() == 0:
             return
-        if hasattr(self, "navigation_dock") and not self.navigation_dock.isVisible():
+        navigation_visible = (
+            self.v10_shell.navigation_panel.isVisible()
+            if hasattr(self, "v10_shell")
+            else self.navigation_dock.isVisible()
+        )
+        if not navigation_visible:
             return
         first = self.page_list.indexAt(QPoint(5, 5)).row()
         if first < 0:
@@ -2311,6 +2392,14 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.status_dirty.setProperty("dirty","true" if dirty else "false")
             self.status_dirty.style().unpolish(self.status_dirty)
             self.status_dirty.style().polish(self.status_dirty)
+        if hasattr(self, "reader_inspector"):
+            self.reader_inspector.update_document(
+                self.doc,
+                self.file_path,
+                self.current_page,
+                self.zoom_factor,
+                self._document_dirty,
+            )
 
     def zoom_in(self):
 
@@ -2651,6 +2740,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self._retranslate_shell()
         self._retranslate_navigation()
         self._retranslate_page_management()
+        if hasattr(self, "reader_inspector"):
+            self.reader_inspector.set_language(code)
         self._update_page_indicator()
 
 
