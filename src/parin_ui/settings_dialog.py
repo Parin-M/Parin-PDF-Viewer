@@ -45,9 +45,21 @@ class SettingsDialogResources:
 
 class SettingsDialog(QDialog):
     settings_changed=Signal(dict)
-    def __init__(self, viewer, resources: SettingsDialogResources):
+    def __init__(
+        self,
+        viewer,
+        resources: SettingsDialogResources | None = None,
+    ):
         super().__init__(viewer)
         self.viewer = viewer
+        if resources is None:
+            resource_factory = getattr(viewer, "_settings_dialog_resources", None)
+            if not callable(resource_factory):
+                raise TypeError(
+                    "SettingsDialog requires resources or a viewer with "
+                    "_settings_dialog_resources()."
+                )
+            resources = resource_factory()
         self.resources = resources
         self.settings = viewer.app_settings.copy()
         self.lang = (

@@ -657,8 +657,8 @@ class ParinPDFViewer(QMainWindow):
         dialog = CommandPaletteDialog(registry, theme, self)
         dialog.exec()
 
-    def open_settings(self):
-        resources = SettingsDialogResources(
+    def _settings_dialog_resources(self):
+        return SettingsDialogResources(
             settings_i18n=SETTINGS_I18N,
             color_themes=tuple(COLOR_THEMES),
             theme_accents=THEME_ACCENTS,
@@ -668,7 +668,9 @@ class ParinPDFViewer(QMainWindow):
             make_app_icon=make_app_icon,
             card_frame=card_frame,
         )
-        dlg = SettingsDialog(self, resources)
+
+    def open_settings(self):
+        dlg = SettingsDialog(self)
         dlg.exec()
 
     def _style_for_theme(self):

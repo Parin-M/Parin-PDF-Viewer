@@ -831,6 +831,8 @@ class SettingsDialogModuleTests(unittest.TestCase):
         )
 
     def _viewer(self):
+        resources = self._resources()
+
         class SettingsViewer(QWidget):
             def __init__(self):
                 super().__init__()
@@ -850,13 +852,16 @@ class SettingsDialogModuleTests(unittest.TestCase):
             def apply_app_settings(self):
                 self.apply_count += 1
 
+            def _settings_dialog_resources(self):
+                return resources
+
         return SettingsViewer()
 
     def test_settings_dialog_uses_injected_resources_and_localizes(self):
         from parin_ui.settings_dialog import SettingsDialog
 
         viewer = self._viewer()
-        dialog = SettingsDialog(viewer, self._resources())
+        dialog = SettingsDialog(viewer)
         try:
             self.assertIn("Parin", dialog.title.text())
             dialog._language_from_settings(1)
