@@ -2014,7 +2014,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.page_label.resize(1, 1)
             self._open_render_generation += 1
             render_generation = self._open_render_generation
-            QTimer.singleShot(80, lambda generation=render_generation: self._finish_open_render(generation))
+            QTimer.singleShot(0, lambda generation=render_generation: self._finish_open_render(generation))
             self._add_recent_file(file_path)
             self._persist_reading_position()
             self.statusBar().showMessage(f"Opened {Path(file_path).name} · {self.doc.page_count} pages", 5000)
