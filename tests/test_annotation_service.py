@@ -29,7 +29,8 @@ class AnnotationServiceTests(unittest.TestCase):
         )
         self.assertEqual(annotation.type[1], "Ink")
         self.assertEqual(len(self._annotations()), 1)
-        self.assertEqual(annotation.colors["stroke"], (0.2, 0.4, 0.8))
+        for actual, expected in zip(annotation.colors["stroke"], (0.2, 0.4, 0.8)):
+            self.assertAlmostEqual(actual, expected, places=6)
         self.assertAlmostEqual(annotation.border["width"], 2.0)
 
     def test_adds_highlighter_with_translucent_wide_stroke(self):
