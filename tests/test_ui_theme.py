@@ -50,7 +50,7 @@ class InterfaceThemeTests(unittest.TestCase):
         self.assertIn("background:#F8FBFF", light)
         self.assertIn("background:#111827", dark)
         self.assertIn("#3A8DFF", dark)
-        self.assertNotIn("color:#FFFFFF", light)
+        self.assertIn("QLabel{color:#182338;background:transparent;}", light)
 
     def test_main_window_starts_on_welcome_page_and_can_switch_to_dark(self):
         with patch("parin_pdf_viewer.QSettings", _MemorySettings):
