@@ -903,5 +903,31 @@ class SettingsDialogModuleTests(unittest.TestCase):
 
 
 
+class SettingsLocalizationTests(unittest.TestCase):
+    def test_settings_locales_include_farsi_and_german(self):
+        from parin_ui.settings_i18n import SETTINGS_I18N
+
+        self.assertIn("فا", SETTINGS_I18N["fa"]["title"][:3])
+        self.assertIn("Übersicht", SETTINGS_I18N["de"]["overview"])
+        self.assertEqual(SETTINGS_I18N["fa"]["appearance_mode"], "حالت ظاهری")
+        self.assertEqual(SETTINGS_I18N["en"]["appearance_mode"], "Appearance mode")
+
+    def test_settings_labels_are_normalized_without_decorative_emoji(self):
+        from parin_ui.settings_i18n import SETTINGS_I18N
+
+        for language in SETTINGS_I18N.values():
+            for value in language.values():
+                self.assertNotRegex(value, r"[\U0001F300-\U0001FAFF]")
+                self.assertEqual(value, " ".join(value.split()))
+
+    def test_settings_localization_module_has_no_qt_dependency(self):
+        from pathlib import Path
+
+        source = Path("src/parin_ui/settings_i18n.py").read_text(encoding="utf-8")
+        self.assertNotIn("PySide6", source)
+        self.assertIn("SETTINGS_I18N", source)
+
+
+
 if __name__ == "__main__":
     unittest.main()

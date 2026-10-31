@@ -93,3 +93,12 @@ The comparison toolbar also offers a read-only unified text diff for the current
 selected pages. Added and removed lines are counted and shown with context. To keep
 comparison responsive on very long or malformed pages, extracted text and displayed
 diff output are bounded before presentation.
+
+
+### Settings module boundary
+
+The settings dialog UI lives in `src/parin_ui/settings_dialog.py`. Its language data and
+label normalization are isolated in the Qt-independent
+`src/parin_ui/settings_i18n.py`; the main viewer supplies appearance resources through
+`SettingsDialogResources`. The existing PDF rendering and document lifecycle remain
+in the legacy main module during the staged migration.
