@@ -20,6 +20,25 @@ QFrame#parin_header {{
     border: none;
     border-bottom: 1px solid {c.border};
 }}
+QFrame#parin_header QPushButton {{
+    color: {c.header_text};
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    min-height: 26px;
+    padding: 3px 9px;
+}}
+QFrame#parin_header QPushButton:hover {{
+    color: {c.header_text};
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(180, 210, 255, 0.48);
+}}
+QFrame#parin_header QPushButton#command_button {{
+    color: {c.header_text};
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    padding: 5px 12px;
+}}
 QLabel#brand_title {{
     color: {c.header_text};
     font-size: 15pt;

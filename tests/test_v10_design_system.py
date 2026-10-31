@@ -51,6 +51,13 @@ class ThemeTokenTests(unittest.TestCase):
         engine.set_mode("dark")
         self.assertIn(engine.tokens.canvas_background, engine.stylesheet)
 
+
+    def test_light_theme_keeps_header_action_text_on_dark_header(self):
+        stylesheet = ThemeEngine("light").stylesheet
+        self.assertIn("QFrame#parin_header QPushButton", stylesheet)
+        self.assertIn("color: #FFFFFF;", stylesheet)
+        self.assertIn("QLineEdit, QComboBox, QSpinBox", stylesheet)
+
     def test_theme_engine_rejects_non_widget_objects(self):
         with self.assertRaises(TypeError):
             ThemeEngine().apply(object())
