@@ -356,5 +356,137 @@ class IntegratedV10ShellTests(unittest.TestCase):
                 self.app.processEvents()
 
 
+
+
+class ResearchStoreTests(unittest.TestCase):
+    def test_notes_are_saved_updated_deleted_and_isolated_by_document(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.research_store import ResearchStore
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            first_pdf = root / "first.pdf"
+            second_pdf = root / "second.pdf"
+            first_pdf.write_bytes(b"%PDF-1.7")
+            second_pdf.write_bytes(b"%PDF-1.7")
+            store = ResearchStore(root / "research")
+
+            note = store.add_note(str(first_pdf), 3, "Check equation on this page")
+            self.assertEqual(store.list_notes(str(first_pdf))[0]["text"], "Check equation on this page")
+            updated = store.update_note(str(first_pdf), note["id"], 4, "Verified source on page four")
+            self.assertEqual(updated["page"], 4)
+            self.assertEqual(store.list_notes(str(second_pdf)), [])
+            self.assertTrue(store.delete_note(str(first_pdf), note["id"]))
+            self.assertEqual(store.list_notes(str(first_pdf)), [])
+
+    def test_invalid_page_and_empty_note_are_rejected(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.research_store import ResearchStore
+
+        with tempfile.TemporaryDirectory() as folder:
+            pdf = Path(folder) / "sample.pdf"
+            pdf.write_bytes(b"%PDF-1.7")
+            store = ResearchStore(Path(folder) / "research")
+            with self.assertRaises(ValueError):
+                store.add_note(str(pdf), 0, "invalid page")
+            with self.assertRaises(ValueError):
+                store.add_note(str(pdf), 1, "   ")
+
+    def test_save_as_copies_notes_without_deleting_source_notes(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.research_store import ResearchStore
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "source.pdf"
+            destination = root / "copy.pdf"
+            source.write_bytes(b"%PDF-1.7")
+            destination.write_bytes(b"%PDF-1.7")
+            store = ResearchStore(root / "research")
+            store.add_note(str(source), 2, "A source note")
+            self.assertEqual(store.copy_document_notes(str(source), str(destination)), 1)
+            self.assertEqual(len(store.list_notes(str(source))), 1)
+            self.assertEqual(len(store.list_notes(str(destination))), 1)
+
+
+class ResearchStudioTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_notes_persist_and_activation_navigates_to_referenced_page(self):
+        import tempfile
+        from pathlib import Path
+        import pymupdf as fitz
+        from parin_ui.research_store import ResearchStore
+        from parin_ui.research_studio import ResearchStudio
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "research.pdf"
+            document = fitz.open()
+            document.new_page()
+            document.new_page()
+            document.save(str(path))
+            document.close()
+            document = fitz.open(str(path))
+            store = ResearchStore(Path(folder) / "research-data")
+            studio = ResearchStudio(store)
+            try:
+                studio.set_document(str(path), document, 1)
+                studio.page_spin.setValue(2)
+                studio.note_editor.setPlainText("Compare this definition with section 4.")
+                self.assertTrue(studio.save_note())
+                self.assertEqual(len(studio.notes), 1)
+                self.assertEqual(studio.notes[0]["page"], 2)
+
+                restarted = ResearchStudio(store)
+                restarted.set_document(str(path), document, 0)
+                self.assertEqual(len(restarted.notes), 1)
+                self.assertIn("Compare this definition", restarted.notes[0]["text"])
+
+                navigated = []
+                studio.navigateRequested.connect(navigated.append)
+                item = studio.notes_list.item(0)
+                studio._activate_note(item)
+                self.assertEqual(navigated, [2])
+                restarted.close()
+            finally:
+                studio.close()
+                document.close()
+
+    def test_highlight_extractor_finds_pdf_highlight_annotations(self):
+        import pymupdf as fitz
+        from parin_ui.research_store import extract_pdf_highlights
+
+        document = fitz.open()
+        page = document.new_page()
+        page.insert_text((72, 72), "Research evidence text")
+        highlight = page.add_highlight_annot(fitz.Rect(70, 55, 180, 78))
+        highlight.set_info(content="Key source passage")
+        highlight.update()
+        items = extract_pdf_highlights(document)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["page"], 1)
+        self.assertIn("Highlight", items[0]["type"])
+        self.assertEqual(items[0]["content"], "Key source passage")
+        document.close()
+
+    def test_research_studio_handles_missing_document(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.research_store import ResearchStore
+        from parin_ui.research_studio import ResearchStudio
+
+        with tempfile.TemporaryDirectory() as folder:
+            studio = ResearchStudio(ResearchStore(Path(folder)))
+            self.assertEqual(studio.notes, ())
+            self.assertFalse(studio.save_button.isEnabled())
+            self.assertEqual(studio.document, None)
+            studio.close()
+
+
 if __name__ == "__main__":
     unittest.main()

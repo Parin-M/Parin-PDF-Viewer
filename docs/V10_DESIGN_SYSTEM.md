@@ -57,3 +57,17 @@ to Reader Studio restores the responsive panels and the same document widget.
 Document Hub now reuses the localized welcome view and its recent-document cards
 and page-one previews. Opening a PDF from the Hub returns to Reader Studio; moving
 between Hub and Reader does not close the in-memory PDF document.
+
+
+## Research Studio
+
+Research Studio now provides document-scoped local research notes and references.
+Notes are stored as atomic JSON sidecars under the application's private data
+directory, keyed by the canonical local PDF path. Each note stores its page number,
+text and timestamps. Save As copies the note set to the new PDF identity while
+retaining the original sidecar.
+
+The studio also reads PDF Highlight annotations and Parin's translucent ink
+highlighter strokes from the open document. Selecting a note or highlight navigates
+the existing Reader to its referenced page. Research data remains local; no document
+content or notes are sent to a remote service.

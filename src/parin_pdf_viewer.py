@@ -7,7 +7,7 @@ import math
 from collections import OrderedDict
 from pathlib import Path
 import pymupdf as fitz  # PyMuPDF (modern API; avoids deprecated fitz import)
-from PySide6.QtCore import Qt, QUrl, QPoint, QPointF, QRectF, QTimer, QSettings, Signal, QSize, QPropertyAnimation, QEasingCurve, QEvent
+from PySide6.QtCore import Qt, QUrl, QPoint, QPointF, QRectF, QTimer, QSettings, Signal, QSize, QPropertyAnimation, QEasingCurve, QEvent, QStandardPaths
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFileDialog, QLineEdit, QScrollArea, 
@@ -26,6 +26,8 @@ from parin_ui.reader_inspector import ReaderInspector
 from parin_ui.studio_pages import StudioLanding
 from parin_ui.theme_engine import ThemeEngine
 from parin_ui.workspace_shell import ParinWorkspaceShell
+from parin_ui.research_store import ResearchStore
+from parin_ui.research_studio import ResearchStudio
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -1317,6 +1319,13 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
 
         self.reader_inspector = ReaderInspector(self.v10_shell)
         self.v10_shell.set_inspector_widget(self.reader_inspector)
+
+        app_data_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
+        if not app_data_dir:
+            app_data_dir = str(Path.home() / ".local" / "share" / "Parin" / "ParinPDFViewer")
+        self.research_store = ResearchStore(Path(app_data_dir) / "research")
+        self.research_studio = ResearchStudio(self.research_store, self.v10_shell)
+        self.research_studio.navigateRequested.connect(self.go_to_page)
         self.reader_inspector.findRequested.connect(self.search_pdf)
         self.reader_inspector.rotateLeftRequested.connect(lambda: self.rotate(-90))
         self.reader_inspector.rotateRightRequested.connect(lambda: self.rotate(90))
@@ -1368,6 +1377,15 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.v10_shell.set_workspace_widget(self.workspace_stack)
             self.workspace_stack.setCurrentWidget(self.welcome_page)
             self._refresh_welcome_page()
+            return
+        if workspace_id == "research":
+            self.v10_shell.set_focus_mode(False)
+            self.research_studio.set_document(
+                self.file_path if self.doc is not None else "",
+                self.doc,
+                self.current_page,
+            )
+            self.v10_shell.set_workspace_widget(self.research_studio)
             return
         self.v10_shell.set_focus_mode(False)
         landing = self._v10_studio_widgets.get(workspace_id)
@@ -1740,6 +1758,12 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
     def mark_document_modified(self):
         self._document_dirty = True
         self._update_page_indicator()
+        if (
+            hasattr(self, "research_studio")
+            and hasattr(self, "v10_shell")
+            and self.v10_shell.active_workspace == "research"
+        ):
+            self.research_studio.refresh_highlights()
         if hasattr(self, "statusBar"):
             self.statusBar().showMessage("Unsaved PDF changes", 4000)
 
@@ -2431,6 +2455,12 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                 self.zoom_factor,
                 self._document_dirty,
             )
+        if hasattr(self, "research_studio"):
+            self.research_studio.set_document(
+                self.file_path if self.doc is not None else "",
+                self.doc,
+                self.current_page,
+            )
 
     def zoom_in(self):
 
@@ -2681,7 +2711,20 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             old_doc.close()
         except Exception:
             pass
+        previous_file_path = self.file_path
         self.file_path = save_path
+        if (
+            previous_file_path
+            and os.path.normcase(os.path.abspath(previous_file_path))
+            != os.path.normcase(os.path.abspath(save_path))
+            and hasattr(self, "research_store")
+        ):
+            try:
+                self.research_store.copy_document_notes(previous_file_path, save_path)
+            except Exception as exc:
+                self.statusBar().showMessage(
+                    f"Research notes were not copied: {exc}", 6000
+                )
         self._document_password = candidate_password
         self._document_encrypted = candidate_encrypted
         self._document_dirty = False
@@ -2773,6 +2816,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self._retranslate_page_management()
         if hasattr(self, "reader_inspector"):
             self.reader_inspector.set_language(code)
+        if hasattr(self, "research_studio"):
+            self.research_studio.set_language(code)
         if hasattr(self, "v10_shell"):
             self.v10_shell.set_language(code)
         self._update_page_indicator()
