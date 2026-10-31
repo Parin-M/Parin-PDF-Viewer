@@ -37,6 +37,14 @@ from parin_ui.annotation_service import (
     erase_annotations_at_point,
 )
 from parin_ui.search_service import find_next_match
+from parin_ui.annotation_runtime import (
+    MAX_STROKE_POINTS,
+    MAX_PREVIEW_POINTS,
+    DEFAULT_PAGE_CACHE_BYTES,
+    PageRenderCache,
+    append_stroke_sample,
+    preview_stroke_points,
+)
 from parin_ui.settings_dialog import SettingsDialog, SettingsDialogResources
 from parin_ui.settings_i18n import SETTINGS_I18N
 from parin_ui.navigation_i18n import NAVIGATION_I18N
@@ -243,7 +251,10 @@ class PDFPageLabel(QLabel):
         super().wheelEvent(event)
 
     def _preview_points(self):
-        points = [(point.x(), point.y()) for point in self.current_stroke_view]
+        points = preview_stroke_points(
+            self.current_stroke_view,
+            max_points=MAX_PREVIEW_POINTS,
+        )
         assistant = getattr(self.viewer, "handwriting_assist", None)
         if self.viewer.app_settings.get("smart_ink", True) and assistant is not None:
             return assistant.smooth_points(points)
@@ -303,13 +314,13 @@ class PDFPageLabel(QLabel):
 
         if self.viewer.active_tool in ("pen", "highlight"):
             self.current_stroke = [(pdf_pt.x, pdf_pt.y)]
-            self.current_stroke_view = [QPointF(event.position())]
+            self.current_stroke_view = [(event.position().x(), event.position().y())]
             self.viewer.is_drawing = True
             self.update()
             return
 
         if self.viewer.active_tool == "eraser":
-            self.viewer._record_undo()
+            self.viewer._record_undo(annotation=True)
             self.viewer.erase_at_point(page, pdf_pt)
             self.update()
             return
@@ -328,7 +339,7 @@ class PDFPageLabel(QLabel):
                 self.viewer.selected_color.blueF(),
             )
             try:
-                self.viewer._record_undo()
+                self.viewer._record_undo(annotation=True)
                 add_text_annotation(
                     page,
                     text,
@@ -337,8 +348,7 @@ class PDFPageLabel(QLabel):
                     font_name=font_name,
                     text_color=color,
                 )
-                self.viewer.mark_document_modified()
-                self.viewer.render_page()
+                self.viewer._after_annotation_change(self.viewer.current_page)
             except Exception as exc:
                 QMessageBox.warning(self.viewer, "Text annotation", str(exc))
 
@@ -348,9 +358,15 @@ class PDFPageLabel(QLabel):
             return
         if self.viewer.active_tool in ("pen", "highlight") and self.viewer.is_drawing:
             pdf_pt = self.viewer.get_pdf_coords(event.position())
-            self.current_stroke.append((pdf_pt.x, pdf_pt.y))
-            self.current_stroke_view.append(QPointF(event.position()))
-            self.update()
+            added = append_stroke_sample(
+                self.current_stroke,
+                self.current_stroke_view,
+                (pdf_pt.x, pdf_pt.y),
+                (event.position().x(), event.position().y()),
+                max_points=MAX_STROKE_POINTS,
+            )
+            if added:
+                self.update()
         elif self.viewer.active_tool == "eraser" and (event.buttons() & Qt.LeftButton):
             pdf_pt = self.viewer.get_pdf_coords(event.position())
             page = self.viewer.doc.load_page(self.viewer.current_page)
@@ -361,9 +377,20 @@ class PDFPageLabel(QLabel):
         if event.button() != Qt.LeftButton:
             super().mouseReleaseEvent(event)
             return
+        if self.viewer.is_drawing and self.viewer.doc:
+            pdf_pt = self.viewer.get_pdf_coords(event.position())
+            append_stroke_sample(
+                self.current_stroke,
+                self.current_stroke_view,
+                (pdf_pt.x, pdf_pt.y),
+                (event.position().x(), event.position().y()),
+                minimum_distance_px=0,
+                max_points=MAX_STROKE_POINTS,
+            )
         if self.viewer.is_drawing and len(self.current_stroke) > 1 and self.viewer.doc:
             page = self.viewer.doc.load_page(self.viewer.current_page)
             stroke = list(self.current_stroke)
+            tool = self.viewer.active_tool
             if self.viewer.app_settings.get("smart_ink", True):
                 stroke = self.viewer.handwriting_assist.smooth_points(stroke)
             self.viewer.is_drawing = False
@@ -374,18 +401,17 @@ class PDFPageLabel(QLabel):
                        self.viewer.selected_color.greenF(),
                        self.viewer.selected_color.blueF())
             try:
-                self.viewer._record_undo()
+                self.viewer._record_undo(annotation=True)
                 add_ink_annotation(
                     page,
                     stroke,
                     (r, g, b),
-                    tool=self.viewer.active_tool,
+                    tool=tool,
                 )
                 if self.viewer.app_settings.get("smart_ink", True):
                     profile = self.viewer.handwriting_assist.describe_style(stroke)
                     self.viewer.statusBar().showMessage(f"Smart Ink · {profile} stroke", 1800)
-                self.viewer.mark_document_modified()
-                self.viewer.render_page()
+                self.viewer._after_annotation_change(self.viewer.current_page)
             except Exception as exc:
                 QMessageBox.warning(self.viewer, "Ink annotation", str(exc))
         else:
@@ -473,6 +499,14 @@ class ParinPDFViewer(QMainWindow):
             self._last_session_zoom = 1.0
         self._last_session_fit_mode = self.settings_store.value('last_fit_mode', 'width', type=str)
         self._thumbnail_cache = OrderedDict()
+        # Rendered pages are cached by document/page/zoom/annotation revision.
+        self._page_render_cache = PageRenderCache(DEFAULT_PAGE_CACHE_BYTES)
+        self._page_annotation_revisions = {}
+        self._annotation_checkpoint_pending = False
+        self._annotation_render_timer = QTimer(self)
+        self._annotation_render_timer.setSingleShot(True)
+        self._annotation_render_timer.setInterval(180)
+        self._annotation_render_timer.timeout.connect(self._render_after_annotation_change)
         self.document_history = DocumentHistory(max_snapshot_bytes=16 * 1024 * 1024, max_undo_steps=5)
         # Compatibility aliases retained for legacy integrations/tests.
         self._undo_stack = self.document_history.undo_stack
@@ -1267,11 +1301,19 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             encryption_keep=fitz.PDF_ENCRYPT_KEEP,
         )
 
-    def _record_undo(self):
+    def _record_undo(self, *, annotation=False):
+        # A continuous annotation session shares one bounded checkpoint. This
+        # avoids serializing a large PDF before every pen stroke or text note.
+        if annotation and self._annotation_checkpoint_pending:
+            return True
+        if not annotation:
+            self._annotation_checkpoint_pending = False
         if not self.doc or self.document_history.disabled:
             return False
         snapshot = self._snapshot_for_history()
         recorded = self.document_history.record(snapshot)
+        if annotation and recorded:
+            self._annotation_checkpoint_pending = True
         if not recorded and self.document_history.disabled:
             self.statusBar().showMessage(
                 "Undo/redo is disabled for this PDF because its history snapshot "
@@ -1279,6 +1321,31 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                 7000,
             )
         return recorded
+
+    def _after_annotation_change(self, page_index=None):
+        if not self.doc or getattr(self.doc, "is_closed", False):
+            return
+        if page_index is None:
+            page_index = self.current_page
+        self._page_annotation_revisions[page_index] = (
+            self._page_annotation_revisions.get(page_index, 0) + 1
+        )
+        self._page_render_cache.invalidate_page(
+            page_index,
+            document_token=id(self.doc),
+        )
+        self.mark_document_modified()
+        if page_index == self.current_page:
+            self._annotation_render_timer.start()
+
+    def _render_after_annotation_change(self):
+        if self.doc is not None and not getattr(self.doc, "is_closed", False):
+            self.render_page()
+
+    def _reset_annotation_render_cache(self):
+        self._annotation_render_timer.stop()
+        self._page_render_cache.clear()
+        self._page_annotation_revisions.clear()
 
     def _restore_history_snapshot(self, snapshot, label):
         replacement = None
@@ -1290,6 +1357,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             previous = self.doc
             self.doc = replacement
             replacement = None
+            self._reset_annotation_render_cache()
+            self._annotation_checkpoint_pending = False
             self._document_encrypted = replacement_encrypted
             self._last_rendered_page_index = None
             if previous:
@@ -1427,6 +1496,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self._last_search_page = -1
         self._last_search_rect_index = -1
         self.search_highlight = None
+        self._reset_annotation_render_cache()
+        self._annotation_checkpoint_pending = False
         self._thumbnail_cache.clear()
         self._refresh_navigation()
         self.mark_document_modified()
@@ -1611,6 +1682,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.document_history.reset()
             self.doc = candidate
             candidate = None
+            self._reset_annotation_render_cache()
+            self._annotation_checkpoint_pending = False
             if previous_doc:
                 try:
                     previous_doc.close()
@@ -1712,6 +1785,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
     def render_page(self):
         if self.doc is None or getattr(self.doc, "is_closed", False) or not (0 <= self.current_page < self.doc.page_count):
             return
+        self._annotation_render_timer.stop()
         try:
             page_changed = getattr(self, "_last_rendered_page_index", None) != self.current_page
             page = self.doc.load_page(self.current_page)
@@ -1733,19 +1807,38 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                     5000,
                 )
 
-            mat = fitz.Matrix(self.zoom_factor, self.zoom_factor).prerotate(self.rotation)
-            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB, alpha=False, annots=True)
-            if pix.width < 1 or pix.height < 1 or pix.n != 3:
-                raise RuntimeError("The PDF renderer returned an invalid RGB page image.")
-            if pix.width * pix.height > MAX_PDF_RENDER_PIXELS:
-                raise RuntimeError("The rendered page exceeded the safe pixel limit.")
-            if pix.stride < pix.width * 3 or len(pix.samples) < pix.stride * pix.height:
-                raise RuntimeError("The PDF renderer returned incomplete pixel data.")
+            cache_enabled = bool(self.app_settings.get("cache_pages", True)) and not self.large_file_mode
+            cache_key = (
+                id(self.doc),
+                self.current_page,
+                round(self.zoom_factor, 5),
+                self.rotation,
+                self._page_annotation_revisions.get(self.current_page, 0),
+            )
+            rendered_pixmap = (
+                self._page_render_cache.get(cache_key)
+                if cache_enabled else None
+            )
+            if rendered_pixmap is None:
+                mat = fitz.Matrix(self.zoom_factor, self.zoom_factor).prerotate(self.rotation)
+                pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB, alpha=False, annots=True)
+                if pix.width < 1 or pix.height < 1 or pix.n != 3:
+                    raise RuntimeError("The PDF renderer returned an invalid RGB page image.")
+                if pix.width * pix.height > MAX_PDF_RENDER_PIXELS:
+                    raise RuntimeError("The rendered page exceeded the safe pixel limit.")
+                if pix.stride < pix.width * 3 or len(pix.samples) < pix.stride * pix.height:
+                    raise RuntimeError("The PDF renderer returned incomplete pixel data.")
 
-            img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
-            rendered_pixmap = QPixmap.fromImage(img)
-            if rendered_pixmap.isNull() or rendered_pixmap.width() < 1 or rendered_pixmap.height() < 1:
-                raise RuntimeError("The PDF page renderer returned an empty image.")
+                img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
+                rendered_pixmap = QPixmap.fromImage(img)
+                if rendered_pixmap.isNull() or rendered_pixmap.width() < 1 or rendered_pixmap.height() < 1:
+                    raise RuntimeError("The PDF page renderer returned an empty image.")
+                if cache_enabled:
+                    self._page_render_cache.put(
+                        cache_key,
+                        rendered_pixmap,
+                        rendered_pixmap.width() * rendered_pixmap.height() * 4,
+                    )
             self.page_label.setMinimumSize(0, 0)
             self.page_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
             self.page_label.setText("")
@@ -2006,8 +2099,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             zoom_factor=self.zoom_factor,
         )
         if erased:
-            self.mark_document_modified()
-            self.render_page()
+            self._after_annotation_change(getattr(page, "number", self.current_page))
         return erased
 
     def handle_pdf_wheel(self, event):
@@ -2170,6 +2262,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
 
         # The service returns only a fully validated document after atomic replace.
         self.doc = saved.document
+        self._reset_annotation_render_cache()
+        self._annotation_checkpoint_pending = False
         try:
             old_doc.close()
         except Exception:

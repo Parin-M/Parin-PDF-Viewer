@@ -104,6 +104,34 @@ class AnnotationServiceTests(unittest.TestCase):
                     callback()
         self.assertEqual(len(self._annotations()), 0)
 
+    def test_many_text_and_ink_annotations_can_be_saved_and_reopened(self):
+        for index in range(120):
+            y = 20 + (index % 20) * 18
+            add_ink_annotation(
+                self.page,
+                [(10, y), (60, y + 2), (110, y)],
+                (0.2, 0.5, 0.8),
+                tool="highlight" if index % 2 else "pen",
+            )
+            add_text_annotation(
+                self.page,
+                f"Note {index}",
+                (130, y),
+                font_size=8,
+            )
+
+        snapshot = self.document.tobytes(deflate=True)
+        reopened = fitz.open(stream=snapshot, filetype="pdf")
+        try:
+            annotations = list(reopened.load_page(0).annots() or ())
+            self.assertEqual(len(annotations), 240)
+            self.assertEqual(
+                sum(annotation.type[1] == "FreeText" for annotation in annotations),
+                120,
+            )
+        finally:
+            reopened.close()
+
     def test_invalid_text_and_eraser_parameters_are_rejected(self):
         with self.assertRaises(ValueError):
             add_text_annotation(self.page, "  ", (10, 10))

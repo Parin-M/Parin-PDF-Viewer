@@ -192,3 +192,15 @@ match count. The Reader retains query input, page navigation, visual
 highlighting, localized no-result messaging and status updates. Search scans
 forward from the current match and wraps across the document without
 re-scanning earlier matches on the starting page.
+
+
+### High-volume annotation runtime safeguards
+
+Pen and highlighter input now use synchronized, bounded stroke buffers. Nearby
+pointer samples are discarded and oversized paths are compacted while retaining
+their endpoints; the live preview is downsampled independently. The Reader uses
+a byte-bounded least-recently-used cache for rendered pages and debounces
+annotation-triggered rerenders. Annotation-only edits share one undo checkpoint
+per session rather than serializing the complete PDF before every stroke.
+Annotations themselves remain native PDF objects and are written by the normal
+validated Save workflow.
