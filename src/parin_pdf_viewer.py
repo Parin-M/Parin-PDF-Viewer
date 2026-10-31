@@ -20,6 +20,9 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_files, ensure_pdf_extension, same_path, clamp_zoom
 from parin_handwriting_assist import SmartInkAssistant
+from parin_ui.command_palette import CommandPaletteDialog
+from parin_ui.legacy_bridge import build_legacy_command_registry
+from parin_ui.theme_engine import ThemeEngine
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -979,6 +982,21 @@ class ParinPDFViewer(QMainWindow):
             ("Reset zoom","Ctrl+0",self.reset_zoom)]:
             action=QAction(text,self,shortcut=key,triggered=slot)
             self.addAction(action)
+
+        self.command_palette_action = QAction("Command Palette", self)
+        self.command_palette_action.setShortcut("Ctrl+K")
+        self.command_palette_action.triggered.connect(self.open_command_palette)
+        self.addAction(self.command_palette_action)
+        more_menu = self.btn_more.menu() if hasattr(self, "btn_more") else None
+        if more_menu is not None:
+            more_menu.addSeparator()
+            more_menu.addAction(self.command_palette_action)
+
+    def open_command_palette(self):
+        registry = build_legacy_command_registry(self)
+        theme = ThemeEngine(self.app_settings.get("appearance_mode", "light"))
+        dialog = CommandPaletteDialog(registry, theme, self)
+        dialog.exec()
 
     def open_settings(self):
         dlg=SettingsDialog(self)
