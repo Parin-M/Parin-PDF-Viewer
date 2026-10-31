@@ -28,6 +28,7 @@ from parin_ui.theme_engine import ThemeEngine
 from parin_ui.workspace_shell import ParinWorkspaceShell
 from parin_ui.research_store import ResearchStore
 from parin_ui.research_studio import ResearchStudio
+from parin_ui.compare_studio import CompareStudio
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -1326,6 +1327,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self.research_store = ResearchStore(Path(app_data_dir) / "research")
         self.research_studio = ResearchStudio(self.research_store, self.v10_shell)
         self.research_studio.navigateRequested.connect(self.go_to_page)
+        self.compare_studio = CompareStudio(self.v10_shell)
         self.reader_inspector.findRequested.connect(self.search_pdf)
         self.reader_inspector.rotateLeftRequested.connect(lambda: self.rotate(-90))
         self.reader_inspector.rotateRightRequested.connect(lambda: self.rotate(90))
@@ -1387,6 +1389,11 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             )
             self.research_studio.refresh_highlights()
             self.v10_shell.set_workspace_widget(self.research_studio)
+            return
+        if workspace_id == "compare":
+            self.v10_shell.set_focus_mode(False)
+            self.compare_studio.set_language(self.current_lang)
+            self.v10_shell.set_workspace_widget(self.compare_studio)
             return
         self.v10_shell.set_focus_mode(False)
         landing = self._v10_studio_widgets.get(workspace_id)
@@ -1999,6 +2006,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                 self.doc.close()
             except Exception:
                 pass
+        if hasattr(self, "compare_studio"):
+            self.compare_studio.close_documents()
         event.accept()
 
     def search_from_bar(self):
@@ -2823,6 +2832,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.reader_inspector.set_language(code)
         if hasattr(self, "research_studio"):
             self.research_studio.set_language(code)
+        if hasattr(self, "compare_studio"):
+            self.compare_studio.set_language(code)
         if hasattr(self, "v10_shell"):
             self.v10_shell.set_language(code)
         self._update_page_indicator()

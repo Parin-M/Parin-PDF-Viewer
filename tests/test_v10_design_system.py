@@ -506,5 +506,109 @@ class ResearchStudioTests(unittest.TestCase):
                 self.app.processEvents()
 
 
+
+
+class CompareStudioTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _make_pdf(self, path, page_count):
+        import pymupdf as fitz
+        document = fitz.open()
+        for index in range(page_count):
+            page = document.new_page()
+            page.insert_text((72, 72), f"Comparison page {index + 1}")
+        document.save(str(path))
+        document.close()
+
+    def test_two_pdfs_load_independently_and_sync_pages(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.compare_studio import CompareStudio
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            left = root / "left.pdf"
+            right = root / "right.pdf"
+            self._make_pdf(left, 4)
+            self._make_pdf(right, 2)
+            studio = CompareStudio()
+            try:
+                self.assertTrue(studio.load_document("left", str(left), report_errors=False))
+                self.assertTrue(studio.load_document("right", str(right), report_errors=False))
+                studio.left_pane.set_page(2)
+                self.assertEqual(studio.right_pane.current_page, 2)
+                studio.left_pane.set_page(4)
+                self.assertEqual(studio.right_pane.current_page, 2)
+                self.assertEqual(studio.left_pane.document.page_count, 4)
+                self.assertEqual(studio.right_pane.document.page_count, 2)
+            finally:
+                studio.close_documents()
+                studio.close()
+
+    def test_sync_can_be_disabled_and_reenabled(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.compare_studio import CompareStudio
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            left = root / "left.pdf"
+            right = root / "right.pdf"
+            self._make_pdf(left, 3)
+            self._make_pdf(right, 3)
+            studio = CompareStudio()
+            try:
+                studio.load_document("left", str(left), report_errors=False)
+                studio.load_document("right", str(right), report_errors=False)
+                studio.sync_checkbox.setChecked(False)
+                studio.left_pane.set_page(3)
+                self.assertEqual(studio.right_pane.current_page, 1)
+                studio.sync_checkbox.setChecked(True)
+                self.assertEqual(studio.right_pane.current_page, 3)
+            finally:
+                studio.close_documents()
+                studio.close()
+
+    def test_failed_replacement_preserves_loaded_document(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.compare_studio import CompareStudio
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            good = root / "good.pdf"
+            bad = root / "bad.pdf"
+            self._make_pdf(good, 1)
+            bad.write_text("not a PDF", encoding="utf-8")
+            studio = CompareStudio()
+            try:
+                self.assertTrue(studio.load_document("left", str(good), report_errors=False))
+                previous = studio.left_pane.document
+                self.assertFalse(studio.load_document("left", str(bad), report_errors=False))
+                self.assertIs(studio.left_pane.document, previous)
+                self.assertEqual(studio.left_pane.document_path, str(good.resolve()))
+            finally:
+                studio.close_documents()
+                studio.close()
+
+    def test_compare_workspace_is_mounted_and_localized(self):
+        from unittest.mock import patch
+        from parin_pdf_viewer import ParinPDFViewer
+        from parin_ui.compare_studio import CompareStudio
+
+        with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+            viewer = ParinPDFViewer()
+            try:
+                viewer.apply_language("fa")
+                viewer.v10_shell.set_active_workspace("compare")
+                self.assertIsInstance(viewer.v10_shell._workspace_widget, CompareStudio)
+                self.assertEqual(viewer.compare_studio.heading.text(), "محیط مقایسه")
+            finally:
+                viewer.close()
+                self.app.processEvents()
+
+
 if __name__ == "__main__":
     unittest.main()

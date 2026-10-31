@@ -71,3 +71,14 @@ The studio also reads PDF Highlight annotations and Parin's translucent ink
 highlighter strokes from the open document. Selecting a note or highlight navigates
 the existing Reader to its referenced page. Research data remains local; no document
 content or notes are sent to a remote service.
+
+
+## Compare Studio
+
+Compare Studio now hosts two independent local PDF documents side by side.
+Each pane validates a candidate file before replacing its current document,
+renders pages inside a bounded scrollable viewport, and exposes its own page
+selector. Page synchronization is enabled by default and can be switched off;
+when enabled, page numbers are matched and clamped to the available range of
+the other document. Closing the main application releases both comparison
+documents. Compare mode is read-only and does not modify either PDF.
