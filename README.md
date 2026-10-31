@@ -5,6 +5,19 @@ A PDF viewer that you can install on Debian and Debian Base OS
 
 Website: https://parin-m.github.io/parin-pdf-viewer-site/
 
+Edition V10.0:
+
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+Edition V9.2:
+
+<img width="1920" height="1050" alt="image" src="https://github.com/user-attachments/assets/bbfe0b0f-2637-4017-bddb-1e5f29d09845" />
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+
 Edition V8.7:
 
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/6ba5411f-a55c-4492-8579-eed11cdcb35f" />
