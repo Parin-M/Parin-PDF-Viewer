@@ -436,6 +436,7 @@ class PdfOpenRegressionTests(unittest.TestCase):
                 viewer = ParinPDFViewer()
                 try:
                     viewer.open_file(str(destination))
+                    viewer.app_settings["confirm_close"] = False
                     original_document = viewer.doc
                     with (
                         patch(
