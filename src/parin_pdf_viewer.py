@@ -1572,7 +1572,12 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self.recent_menu.setTitle(self._nav_text("recent"))
         self.navigation_tabs.setTabText(0, self._nav_text("outline"))
         self.navigation_tabs.setTabText(1, self._nav_text("pages"))
-        if self.navigation_dock.isVisible():
+        navigation_visible = (
+            self.v10_shell.navigation_panel.isVisible()
+            if hasattr(self, "v10_shell")
+            else self.navigation_dock.isVisible()
+        )
+        if navigation_visible:
             self._refresh_navigation()
 
     def toggle_navigation_panel(self):
@@ -2768,6 +2773,8 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         self._retranslate_page_management()
         if hasattr(self, "reader_inspector"):
             self.reader_inspector.set_language(code)
+        if hasattr(self, "v10_shell"):
+            self.v10_shell.set_language(code)
         self._update_page_indicator()
 
 

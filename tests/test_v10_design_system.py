@@ -168,6 +168,23 @@ class WorkspaceShellTests(unittest.TestCase):
         finally:
             shell.close()
 
+
+    def test_shell_localizes_workspace_and_context_labels(self):
+        shell = ParinWorkspaceShell()
+        try:
+            shell.set_language("fa")
+            shell.set_active_workspace("focus")
+            self.assertEqual(shell.workspace_heading.text(), "فضاهای کاری")
+            self.assertEqual(shell.workspace_title.text(), "حالت تمرکز")
+            self.assertEqual(shell.focus_exit_button.text(), "خروج از تمرکز")
+            self.assertEqual(shell.command_button.text(), "جست‌وجوی فرمان‌ها    Ctrl+K")
+
+            shell.set_language("de")
+            self.assertEqual(shell.inspector_heading.text(), "DOKUMENT-INSPEKTOR")
+            self.assertEqual(shell.workspace_title.text(), "Focus Studio")
+        finally:
+            shell.close()
+
     def test_invalid_workspace_is_rejected(self):
         shell = ParinWorkspaceShell()
         try:

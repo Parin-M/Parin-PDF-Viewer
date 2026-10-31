@@ -30,6 +30,54 @@ WORKSPACES = (
     ("hub", "Document Hub"),
 )
 
+SHELL_LABELS = {
+    "en": {
+        "workspaces_heading": "WORKSPACES",
+        "inspector_heading": "INSPECTOR",
+        "command": "Search commands    Ctrl+K",
+        "fit_width": "Fit Width",
+        "fit_page": "Fit Page",
+        "exit_focus": "Exit Focus",
+        "workspace_titles": {
+            "reader": "Reader Studio",
+            "focus": "Focus Studio",
+            "research": "Research Studio",
+            "compare": "Compare Studio",
+            "hub": "Document Hub",
+        },
+    },
+    "fa": {
+        "workspaces_heading": "فضاهای کاری",
+        "inspector_heading": "بازرس سند",
+        "command": "جست‌وجوی فرمان‌ها    Ctrl+K",
+        "fit_width": "تناسب با عرض",
+        "fit_page": "تناسب با صفحه",
+        "exit_focus": "خروج از تمرکز",
+        "workspace_titles": {
+            "reader": "محیط مطالعه",
+            "focus": "حالت تمرکز",
+            "research": "محیط پژوهش",
+            "compare": "مقایسهٔ اسناد",
+            "hub": "مدیریت اسناد",
+        },
+    },
+    "de": {
+        "workspaces_heading": "ARBEITSBEREICHE",
+        "inspector_heading": "DOKUMENT-INSPEKTOR",
+        "command": "Befehle suchen    Ctrl+K",
+        "fit_width": "Breite anpassen",
+        "fit_page": "Seite einpassen",
+        "exit_focus": "Fokus beenden",
+        "workspace_titles": {
+            "reader": "Reader Studio",
+            "focus": "Focus Studio",
+            "research": "Research Studio",
+            "compare": "Compare Studio",
+            "hub": "Dokumenten-Hub",
+        },
+    },
+}
+
 
 class ParinWorkspaceShell(QWidget):
     """High-density shell with replaceable content and functional command routing.
@@ -61,6 +109,7 @@ class ParinWorkspaceShell(QWidget):
         self.theme = ThemeEngine(theme_mode)
         self.metrics: LayoutMetrics = get_layout_metrics(density)
         self._active_workspace = "reader"
+        self._language = "en"
         self._focus_mode = False
         self._workspace_widget: QWidget | None = None
         self._navigation_buttons: dict[str, QToolButton] = {}
@@ -249,9 +298,9 @@ class ParinWorkspaceShell(QWidget):
         layout.setSpacing(5)
         self._navigation_layout = layout
 
-        heading = QLabel("WORKSPACES", panel)
-        heading.setProperty("role", "muted")
-        layout.addWidget(heading)
+        self.workspace_heading = QLabel("WORKSPACES", panel)
+        self.workspace_heading.setProperty("role", "muted")
+        layout.addWidget(self.workspace_heading)
 
         for workspace_id, title in WORKSPACES:
             button = QToolButton(panel)
@@ -279,9 +328,9 @@ class ParinWorkspaceShell(QWidget):
         layout.setSpacing(8)
         self._inspector_layout = layout
 
-        heading = QLabel("INSPECTOR", panel)
-        heading.setProperty("role", "muted")
-        layout.addWidget(heading)
+        self.inspector_heading = QLabel("INSPECTOR", panel)
+        self.inspector_heading.setProperty("role", "muted")
+        layout.addWidget(self.inspector_heading)
 
         self.inspector_title = QLabel("Document", panel)
         self.inspector_title.setStyleSheet("font-size:12pt;font-weight:700;")
@@ -349,7 +398,9 @@ class ParinWorkspaceShell(QWidget):
         if workspace_id not in titles:
             raise ValueError(f"Unknown workspace: {workspace_id}")
         self._active_workspace = workspace_id
-        self.workspace_title.setText(titles[workspace_id])
+        self.workspace_title.setText(
+            SHELL_LABELS[self._language]["workspace_titles"][workspace_id]
+        )
         self._navigation_buttons[workspace_id].setChecked(True)
         self.commandTriggered.emit(f"workspace.{workspace_id}")
         self.workspaceChanged.emit(workspace_id)
@@ -366,6 +417,25 @@ class ParinWorkspaceShell(QWidget):
         self._workspace_widget = widget
         self.workspace_stack.addWidget(widget)
         self.workspace_stack.setCurrentWidget(widget)
+
+    def set_language(self, language: str) -> None:
+        """Translate the shell chrome while preserving the active workspace."""
+        normalized = str(language).lower()
+        self._language = normalized if normalized in SHELL_LABELS else "en"
+        labels = SHELL_LABELS[self._language]
+        self.workspace_heading.setText(labels["workspaces_heading"])
+        self.inspector_heading.setText(labels["inspector_heading"])
+        self.command_button.setText(labels["command"])
+        self.fit_width_button.setText(labels["fit_width"])
+        self.fit_page_button.setText(labels["fit_page"])
+        self.focus_exit_button.setText(labels["exit_focus"])
+        for workspace_id, _title in WORKSPACES:
+            self._navigation_buttons[workspace_id].setText(
+                labels["workspace_titles"][workspace_id]
+            )
+        self.workspace_title.setText(
+            labels["workspace_titles"][self._active_workspace]
+        )
 
     def set_toolbar_widget(self, widget: QWidget) -> None:
         """Replace the starter toolbar with the viewer's complete action row."""
