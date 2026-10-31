@@ -960,5 +960,131 @@ class NavigationLocalizationTests(unittest.TestCase):
 
 
 
+class NavigationPanelControllerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _make_viewer(self):
+        import pymupdf as fitz
+        from PySide6.QtGui import QAction
+        from PySide6.QtWidgets import QMainWindow, QMenu
+
+        class Viewer(QMainWindow):
+            def __init__(self, document):
+                super().__init__()
+                self.doc = document
+                self.current_page = 0
+                self.current_lang = "en"
+                self.visited_pages = []
+                self.navigation_action = QAction("Navigation", self)
+                self.recent_menu = QMenu(self)
+
+            def _navigate_outline_item(self, item, column=0):
+                page_index = item.data(0, Qt.ItemDataRole.UserRole)
+                if isinstance(page_index, int):
+                    self.go_to_page(page_index + 1)
+
+            def _navigate_page_list(self, row):
+                if self.doc and 0 <= row < self.doc.page_count and row != self.current_page:
+                    self.go_to_page(row + 1)
+
+            def go_to_page(self, page_number):
+                self.visited_pages.append(page_number)
+                self.current_page = page_number - 1
+
+        document = fitz.open()
+        document.new_page().insert_text((72, 72), "First page")
+        document.new_page().insert_text((72, 72), "Second page")
+        document.set_toc([[1, "Chapter One", 1], [2, "Section Two", 2]])
+        return Viewer(document), document
+
+    def test_controller_builds_navigation_widgets_and_projects_pdf_outline(self):
+        from parin_ui.navigation_i18n import NAVIGATION_I18N
+        from parin_ui.navigation_panel import NavigationPanelController
+
+        viewer, document = self._make_viewer()
+        controller = NavigationPanelController(viewer, NAVIGATION_I18N)
+        try:
+            viewer.show()
+            controller.dock.show()
+            self.app.processEvents()
+            controller.refresh()
+            self.assertEqual(controller.page_list.count(), 2)
+            self.assertEqual(controller.page_list.item(0).text(), "Page 1")
+            self.assertEqual(controller.outline_tree.topLevelItemCount(), 1)
+            chapter = controller.outline_tree.topLevelItem(0)
+            self.assertEqual(chapter.text(0), "Chapter One")
+            self.assertEqual(chapter.childCount(), 1)
+        finally:
+            viewer.close()
+            document.close()
+
+    def test_page_and_outline_selection_route_to_reader_navigation(self):
+        from parin_ui.navigation_i18n import NAVIGATION_I18N
+        from parin_ui.navigation_panel import NavigationPanelController
+
+        viewer, document = self._make_viewer()
+        controller = NavigationPanelController(viewer, NAVIGATION_I18N)
+        try:
+            viewer.show()
+            controller.dock.show()
+            self.app.processEvents()
+            controller.refresh()
+            controller.page_list.setCurrentRow(1)
+            self.assertEqual(viewer.visited_pages, [2])
+            chapter = controller.outline_tree.topLevelItem(0)
+            section = chapter.child(0)
+            controller.outline_tree.itemActivated.emit(section, 0)
+            self.assertEqual(viewer.visited_pages[-1], 2)
+        finally:
+            viewer.close()
+            document.close()
+
+    def test_translation_and_current_page_sync_are_owned_by_controller(self):
+        from parin_ui.navigation_i18n import NAVIGATION_I18N
+        from parin_ui.navigation_panel import NavigationPanelController
+
+        viewer, document = self._make_viewer()
+        controller = NavigationPanelController(viewer, NAVIGATION_I18N)
+        try:
+            viewer.show()
+            controller.dock.show()
+            self.app.processEvents()
+            controller.refresh()
+            self.assertEqual(controller.nav_text("page", n=4), "Page 4")
+            viewer.current_lang = "fa"
+            controller.retranslate()
+            self.assertEqual(controller.tabs.tabText(0), "فهرست")
+            self.assertEqual(controller.nav_text("page", n=4), "صفحهٔ 4")
+
+            viewer._navigation_needs_refresh = False
+            viewer.current_page = 1
+            controller.sync_current_page()
+            self.assertEqual(controller.page_list.currentRow(), 1)
+        finally:
+            viewer.close()
+            document.close()
+
+    def test_visible_page_thumbnails_are_cached_with_a_bounded_lru(self):
+        from parin_ui.navigation_i18n import NAVIGATION_I18N
+        from parin_ui.navigation_panel import NavigationPanelController
+
+        viewer, document = self._make_viewer()
+        controller = NavigationPanelController(viewer, NAVIGATION_I18N)
+        try:
+            viewer.show()
+            controller.dock.show()
+            self.app.processEvents()
+            controller.refresh()
+            controller.load_visible_thumbnails()
+            self.assertGreater(len(controller.thumbnail_cache), 0)
+            self.assertLessEqual(len(controller.thumbnail_cache), 40)
+        finally:
+            viewer.close()
+            document.close()
+
+
+
 if __name__ == "__main__":
     unittest.main()

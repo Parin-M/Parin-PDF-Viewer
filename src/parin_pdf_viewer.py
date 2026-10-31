@@ -33,6 +33,7 @@ from parin_ui.page_organizer import PageOrganizerDialog
 from parin_ui.settings_dialog import SettingsDialog, SettingsDialogResources
 from parin_ui.settings_i18n import SETTINGS_I18N
 from parin_ui.navigation_i18n import NAVIGATION_I18N
+from parin_ui.navigation_panel import NavigationPanelController
 
 # Text helper must be defined before translation tables are normalized.
 EMOJI_RE = re.compile(r'[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF]')
@@ -1139,56 +1140,18 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.recent_grid.addWidget(card,index//columns,index%columns)
 
     def _build_navigation_dock(self):
-        self._navigation_needs_refresh = True
-        self.navigation_dock = QDockWidget(self._nav_text("dock"), self)
-        self.navigation_dock.setObjectName("navigation_dock")
-        self.navigation_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        self.navigation_dock.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetMovable)
-        self.navigation_dock.setMinimumWidth(230)
-        self.navigation_tabs = QTabWidget(self.navigation_dock)
-        self.outline_tree = QTreeWidget(self.navigation_tabs)
-        self.outline_tree.setHeaderHidden(True)
-        self.outline_tree.itemActivated.connect(self._navigate_outline_item)
-        self.page_list = QListWidget(self.navigation_tabs)
-        self.page_list.setIconSize(QSize(76, 100))
-        self.page_list.setUniformItemSizes(True)
-        self.page_list.setSpacing(6)
-        self.page_list.setAlternatingRowColors(True)
-        self.page_list.currentRowChanged.connect(self._navigate_page_list)
-        self.page_list.verticalScrollBar().valueChanged.connect(self._schedule_thumbnail_refresh)
-        self.navigation_tabs.addTab(self.outline_tree, self._nav_text("outline"))
-        self.navigation_tabs.addTab(self.page_list, self._nav_text("pages"))
-        self.navigation_dock.setWidget(self.navigation_tabs)
-        self.addDockWidget(Qt.LeftDockWidgetArea, self.navigation_dock)
-        self.navigation_dock.hide()
-        self._thumbnail_refresh_timer = QTimer(self)
-        self._thumbnail_refresh_timer.setSingleShot(True)
-        self._thumbnail_refresh_timer.setInterval(80)
-        self._thumbnail_refresh_timer.timeout.connect(self._load_visible_thumbnails)
+        self.navigation_panel_controller = NavigationPanelController(self, NAVIGATION_I18N)
 
     def _nav_text(self, key, **kwargs):
-        language = NAVIGATION_I18N.get(self.current_lang, NAVIGATION_I18N["en"])
-        template = language.get(key, NAVIGATION_I18N["en"].get(key, key))
-        try:
-            return template.format(**kwargs)
-        except (KeyError, ValueError):
-            return template
+        controller = getattr(self, "navigation_panel_controller", None)
+        if controller is None:
+            return NAVIGATION_I18N.get(self.current_lang, NAVIGATION_I18N["en"]).get(key, key).format(**kwargs)
+        return controller.nav_text(key, **kwargs)
 
     def _retranslate_navigation(self):
-        if not hasattr(self, "navigation_dock"):
-            return
-        self.navigation_dock.setWindowTitle(self._nav_text("dock"))
-        self.navigation_action.setText(self._nav_text("nav_action"))
-        self.recent_menu.setTitle(self._nav_text("recent"))
-        self.navigation_tabs.setTabText(0, self._nav_text("outline"))
-        self.navigation_tabs.setTabText(1, self._nav_text("pages"))
-        navigation_visible = (
-            self.v10_shell.navigation_panel.isVisible()
-            if hasattr(self, "v10_shell")
-            else self.navigation_dock.isVisible()
-        )
-        if navigation_visible:
-            self._refresh_navigation()
+        controller = getattr(self, "navigation_panel_controller", None)
+        if controller is not None:
+            controller.retranslate()
 
     def toggle_navigation_panel(self):
         if hasattr(self, "v10_shell"):
@@ -1211,97 +1174,24 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.go_to_page(row + 1)
 
     def _refresh_navigation(self):
-        if not hasattr(self, "page_list"):
-            return
-        navigation_visible = (
-            self.v10_shell.navigation_panel.isVisible()
-            if hasattr(self, "v10_shell")
-            else self.navigation_dock.isVisible()
-        )
-        if not navigation_visible:
-            self._navigation_needs_refresh = True
-            return
-        self._navigation_needs_refresh = False
-        self._thumbnail_cache.clear()
-        self.page_list.blockSignals(True)
-        self.page_list.clear()
-        if self.doc:
-            for index in range(self.doc.page_count):
-                item = QListWidgetItem(self._nav_text("page", n=index + 1))
-                item.setData(Qt.UserRole, index)
-                self.page_list.addItem(item)
-            self.page_list.setCurrentRow(self.current_page if self.current_page < self.page_list.count() else 0)
-        self.page_list.blockSignals(False)
-
-        self.outline_tree.clear()
-        if self.doc:
-            try:
-                stack = []
-                for entry in self.doc.get_toc(simple=True):
-                    if len(entry) < 3:
-                        continue
-                    level, title, page_number = entry[:3]
-                    if not isinstance(page_number, int) or page_number < 1:
-                        continue
-                    item = QTreeWidgetItem([str(title or f"Page {page_number}")])
-                    item.setData(0, Qt.UserRole, page_number - 1)
-                    while stack and stack[-1][0] >= level:
-                        stack.pop()
-                    if stack:
-                        stack[-1][1].addChild(item)
-                    else:
-                        self.outline_tree.addTopLevelItem(item)
-                    stack.append((level, item))
-                if self.outline_tree.topLevelItemCount() == 0:
-                    empty = QTreeWidgetItem([self._nav_text("no_outline")])
-                    empty.setDisabled(True)
-                    self.outline_tree.addTopLevelItem(empty)
-                self.outline_tree.expandToDepth(1)
-            except Exception as exc:
-                self.statusBar().showMessage(f"Could not read PDF outline: {exc}", 5000)
-        self._schedule_thumbnail_refresh()
+        controller = getattr(self, "navigation_panel_controller", None)
+        if controller is not None:
+            controller.refresh()
 
     def _schedule_thumbnail_refresh(self, *_args):
-        timer = getattr(self, "_thumbnail_refresh_timer", None)
-        if timer is not None:
-            timer.start()
+        controller = getattr(self, "navigation_panel_controller", None)
+        if controller is not None:
+            controller.schedule_thumbnail_refresh()
 
     def _load_visible_thumbnails(self):
-        if not self.doc or not hasattr(self, "page_list") or self.page_list.count() == 0:
-            return
-        navigation_visible = (
-            self.v10_shell.navigation_panel.isVisible()
-            if hasattr(self, "v10_shell")
-            else self.navigation_dock.isVisible()
-        )
-        if not navigation_visible:
-            return
-        first = self.page_list.indexAt(QPoint(5, 5)).row()
-        if first < 0:
-            first = max(0, self.page_list.currentRow())
-        visible_count = max(8, min(16, self.page_list.viewport().height() // 90 + 4))
-        for index in range(first, min(self.page_list.count(), first + visible_count)):
-            item = self.page_list.item(index)
-            if index in self._thumbnail_cache:
-                item.setIcon(self._thumbnail_cache[index])
-                self._thumbnail_cache.move_to_end(index)
-                continue
-            try:
-                page = self.doc.load_page(index)
-                width, height = max(1, page.rect.width), max(1, page.rect.height)
-                scale = min(88 / width, 112 / height, 0.28)
-                pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
-                image = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
-                icon = QIcon(QPixmap.fromImage(image))
-                item.setIcon(icon)
-                self._thumbnail_cache[index] = icon
-                while len(self._thumbnail_cache) > 40:
-                    expired_index, _ = self._thumbnail_cache.popitem(last=False)
-                    expired_item = self.page_list.item(expired_index)
-                    if expired_item is not None:
-                        expired_item.setIcon(QIcon())
-            except Exception:
-                continue
+        controller = getattr(self, "navigation_panel_controller", None)
+        if controller is not None:
+            controller.load_visible_thumbnails()
+
+    def _sync_navigation_page_selection(self):
+        controller = getattr(self, "navigation_panel_controller", None)
+        if controller is not None:
+            controller.sync_current_page()
 
     def _persist_reading_position(self):
         if not self.app_settings.get('remember_last', True):
@@ -1861,11 +1751,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                 # New pages start at the top; normal re-renders preserve scroll.
                 self.scroll_area.horizontalScrollBar().setValue(0)
                 self.scroll_area.verticalScrollBar().setValue(0)
-            if not self._navigation_needs_refresh and hasattr(self, "page_list") and 0 <= self.current_page < self.page_list.count() and self.page_list.currentRow() != self.current_page:
-                self.page_list.blockSignals(True)
-                self.page_list.setCurrentRow(self.current_page)
-                self.page_list.blockSignals(False)
-                self._schedule_thumbnail_refresh()
+            self._sync_navigation_page_selection()
             self._update_page_indicator()
             self.page_label.update()
             self._persist_reading_position()

@@ -95,6 +95,14 @@ comparison responsive on very long or malformed pages, extracted text and displa
 diff output are bounded before presentation.
 
 
+### Navigation panel and thumbnail controller
+
+The navigation dock, PDF outline projection, page-list synchronization, lazy thumbnail
+rendering and bounded LRU cache are managed by
+`src/parin_ui/navigation_panel.py`. The main viewer remains responsible for document
+lifecycle and page navigation; the controller keeps compatibility aliases on the
+viewer while owning the navigation widgets and refresh timer.
+
 ### Navigation localization boundary
 
 The navigation panel's labels are stored in the Qt-independent
