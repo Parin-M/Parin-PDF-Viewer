@@ -62,6 +62,8 @@ class InterfaceThemeTests(unittest.TestCase):
                 self.assertIsNotNone(viewer.recent_grid)
                 self.assertEqual(viewer.palette().color(QPalette.WindowText).name(), "#20324a")
                 self.assertIn("color:#20324A", viewer.styleSheet())
+                self.assertIn("background-color:#10243F", viewer.header.styleSheet())
+                self.assertIn("color:#FFFFFF", viewer.brand_title.styleSheet())
 
                 dialog = SettingsDialog(viewer)
                 self.assertEqual(dialog.card_titles[0].styleSheet(), "")

@@ -1093,11 +1093,28 @@ QDialog{{background:{dialog_bg};}}
 QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px solid {border};border-radius:7px;padding:6px 9px;}}
 '''
         self.setStyleSheet(base+common)
+        if hasattr(self, "header"):
+            # Keep the brand/header surface dark in both appearance modes.
+            # Applying this directly avoids inherited QWidget surface rules
+            # washing out white header labels in light colour themes.
+            self.header.setAttribute(Qt.WA_StyledBackground, True)
+            self.header.setStyleSheet(
+                f"background-color:{header_bg};border-bottom:1px solid {header_border};"
+            )
+            self.brand_title.setStyleSheet("color:#FFFFFF;background:transparent;font-weight:800;")
+            self.brand_subtitle.setStyleSheet("color:#D5E0EE;background:transparent;")
+            header_button_style = (
+                "QPushButton{background:rgba(255,255,255,0.08);color:#FFFFFF;"
+                "border:1px solid #526984;border-radius:11px;padding:8px 12px;font-weight:650;}"
+                "QPushButton:hover{background:#23466F;border-color:" + ah + ";}"
+            )
+            for header_button in (self.btn_navigation, self.btn_settings, self.btn_lang):
+                header_button.setStyleSheet(header_button_style)
+
         if hasattr(self,'page_label'):
-            if self.app_settings.get('page_shadow',True):
-                shadow=QGraphicsDropShadowEffect(self.page_label); shadow.setBlurRadius(26); shadow.setOffset(0,4); shadow.setColor(QColor(0,0,0,100 if dark else 52)); self.page_label.setGraphicsEffect(shadow)
-            else:
-                self.page_label.setGraphicsEffect(None)
+            # Avoid an off-screen graphics-effect surface on large PDF bitmaps;
+            # it can consume substantial memory and is not needed for rendering.
+            self.page_label.setGraphicsEffect(None)
         self._refresh_welcome_page()
         self._update_page_indicator()
         self.statusBar().setVisible(bool(self.app_settings.get('status_bar',True)))
@@ -1990,13 +2007,14 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self._refresh_navigation()
             if hasattr(self,'workspace_stack'):
                 self.workspace_stack.setCurrentWidget(self.scroll_area)
-            self._apply_fit() if self.fit_mode in ('width', 'page') else self.render_page()
-            # Re-render once the stacked page has completed its layout pass.
-            # This avoids fitting against a hidden/zero-sized viewport when a
-            # document is opened immediately after application startup.
+            # Wait for the PDF workspace to become visible before rasterizing.
+            # A hidden QScrollArea can report stale viewport geometry during the
+            # welcome-to-document transition and leave its first page unpainted.
+            self.page_label.clear()
+            self.page_label.resize(1, 1)
             self._open_render_generation += 1
             render_generation = self._open_render_generation
-            QTimer.singleShot(0, lambda generation=render_generation: self._finish_open_render(generation))
+            QTimer.singleShot(80, lambda generation=render_generation: self._finish_open_render(generation))
             self._add_recent_file(file_path)
             self._persist_reading_position()
             self.statusBar().showMessage(f"Opened {Path(file_path).name} · {self.doc.page_count} pages", 5000)
@@ -2015,10 +2033,31 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             return
         if hasattr(self, "workspace_stack"):
             self.workspace_stack.setCurrentWidget(self.scroll_area)
+        if not self.isVisible() or not self.scroll_area.isVisible():
+            QTimer.singleShot(80, lambda g=generation: self._finish_open_render(g))
+            return
+        self.ensurePolished()
+        self.workspace_stack.ensurePolished()
         self.scroll_area.ensurePolished()
+        if self.workspace_stack.layout() is not None:
+            self.workspace_stack.layout().activate()
         viewport_size = self.scroll_area.viewport().size()
         self._last_viewport_size = (viewport_size.width(), viewport_size.height())
+        if viewport_size.width() < 80 or viewport_size.height() < 80:
+            QTimer.singleShot(80, lambda g=generation: self._finish_open_render(g))
+            return
         self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
+        QTimer.singleShot(40, lambda g=generation: self._confirm_initial_page_paint(g))
+
+    def _confirm_initial_page_paint(self, generation):
+        if generation != self._open_render_generation or self.doc is None or getattr(self.doc, "is_closed", False):
+            return
+        pixmap = self.page_label.pixmap()
+        if pixmap is None or pixmap.isNull():
+            self.render_page()
+        else:
+            self.page_label.repaint()
+            self.scroll_area.viewport().update()
 
     def _effective_page_size(self, page):
         return (page.rect.height, page.rect.width) if self.rotation % 180 else (page.rect.width, page.rect.height)

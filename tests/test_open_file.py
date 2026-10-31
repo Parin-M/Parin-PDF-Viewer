@@ -110,6 +110,56 @@ class PdfOpenRegressionTests(unittest.TestCase):
                     self.app.processEvents()
 
 
+
+    def test_727_page_document_renders_page_one_into_visible_viewport(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "large-page-count.pdf"
+            document = fitz.open()
+            for index in range(727):
+                page = document.new_page(width=595, height=842)
+                if index == 0:
+                    page.draw_rect(
+                        fitz.Rect(80, 80, 515, 760),
+                        color=(0.1, 0.2, 0.8),
+                        fill=(0.1, 0.2, 0.8),
+                    )
+                    page.insert_text((110, 140), "Visible first page", fontsize=24, color=(1, 1, 1))
+            document.save(str(path), garbage=3, deflate=True)
+            document.close()
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                try:
+                    viewer.resize(1480, 900)
+                    viewer.show()
+                    self.app.processEvents()
+                    viewer.open_file(str(path))
+                    for _ in range(8):
+                        self.app.processEvents()
+
+                    self.assertEqual(viewer.doc.page_count, 727)
+                    self.assertEqual(viewer.current_page, 0)
+                    pixmap = viewer.page_label.pixmap()
+                    self.assertIsNotNone(pixmap)
+                    self.assertFalse(pixmap.isNull())
+                    self.assertGreater(pixmap.width(), 500)
+                    self.assertGreater(pixmap.height(), 700)
+
+                    viewport_image = viewer.scroll_area.viewport().grab().toImage()
+                    visible_blue = False
+                    for y in range(20, viewport_image.height(), 25):
+                        for x in range(20, viewport_image.width(), 25):
+                            color = viewport_image.pixelColor(x, y)
+                            if color.blue() > 100 and color.blue() > color.red() + 45:
+                                visible_blue = True
+                                break
+                        if visible_blue:
+                            break
+                    self.assertTrue(visible_blue, "page-one pixels must be painted in the visible PDF viewport")
+                finally:
+                    viewer.close()
+                    self.app.processEvents()
+
     def test_next_and_previous_page_render_the_selected_page(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "navigation-colors.pdf"
