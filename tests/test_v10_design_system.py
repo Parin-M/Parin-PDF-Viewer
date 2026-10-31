@@ -58,6 +58,17 @@ class ThemeTokenTests(unittest.TestCase):
         self.assertIn("color: #FFFFFF;", stylesheet)
         self.assertIn("QLineEdit, QComboBox, QSpinBox", stylesheet)
 
+    def test_text_editors_use_theme_surface_and_selection_tokens(self):
+        for mode in ("dark", "light"):
+            engine = ThemeEngine(mode)
+            stylesheet = engine.stylesheet
+            self.assertIn("QTextEdit, QPlainTextEdit", stylesheet)
+            self.assertIn(engine.tokens.surface, stylesheet)
+            self.assertIn(engine.tokens.selection_background, stylesheet)
+            self.assertIn(engine.tokens.selection_text, stylesheet)
+            self.assertIn(engine.tokens.accent, stylesheet)
+            self.assertIn("QTextEdit:disabled, QPlainTextEdit:disabled", stylesheet)
+
     def test_theme_engine_rejects_non_widget_objects(self):
         with self.assertRaises(TypeError):
             ThemeEngine().apply(object())

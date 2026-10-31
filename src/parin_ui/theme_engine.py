@@ -142,6 +142,22 @@ QLineEdit, QComboBox, QSpinBox {{
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{
     border: 2px solid {c.accent};
 }}
+QTextEdit, QPlainTextEdit {{
+    color: {c.text};
+    background: {c.surface};
+    border: 1px solid {c.border};
+    border-radius: 8px;
+    padding: 8px;
+    selection-background-color: {c.selection_background};
+    selection-color: {c.selection_text};
+}}
+QTextEdit:focus, QPlainTextEdit:focus {{
+    border: 2px solid {c.accent};
+}}
+QTextEdit:disabled, QPlainTextEdit:disabled {{
+    color: {c.subtle_text};
+    background: {c.panel_background};
+}}
 QListWidget {{
     color: {c.text};
     background: {c.surface};
