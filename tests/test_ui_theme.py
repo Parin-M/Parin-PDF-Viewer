@@ -9,6 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pymupdf as fitz
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QPalette
 
 from parin_pdf_viewer import (
     COLOR_THEMES,
@@ -49,6 +50,7 @@ class InterfaceThemeTests(unittest.TestCase):
         self.assertIn("background:#F8FBFF", light)
         self.assertIn("background:#111827", dark)
         self.assertIn("#3A8DFF", dark)
+        self.assertNotIn("color:#FFFFFF", light)
 
     def test_main_window_starts_on_welcome_page_and_can_switch_to_dark(self):
         with patch("parin_pdf_viewer.QSettings", _MemorySettings):
@@ -58,14 +60,18 @@ class InterfaceThemeTests(unittest.TestCase):
                 self.assertIs(viewer.workspace_stack.currentWidget(), viewer.welcome_page)
                 self.assertIsNotNone(viewer.welcome_open_button)
                 self.assertIsNotNone(viewer.recent_grid)
+                self.assertEqual(viewer.palette().color(QPalette.WindowText).name(), "#20324a")
+                self.assertIn("color:#20324A", viewer.styleSheet())
 
                 dialog = SettingsDialog(viewer)
+                self.assertEqual(dialog.card_titles[0].styleSheet(), "")
                 dialog.appearance_mode.setCurrentIndex(1)
                 self.assertEqual(dialog.collect()["appearance_mode"], "dark")
 
                 dialog.apply_changes()
                 self.assertEqual(viewer.app_settings["appearance_mode"], "dark")
                 self.assertIn("background:#111827", viewer.styleSheet())
+                self.assertEqual(viewer.palette().color(QPalette.WindowText).name(), "#eaf1fa")
             finally:
                 if dialog is not None:
                     dialog.close()

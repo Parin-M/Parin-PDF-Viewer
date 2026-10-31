@@ -109,6 +109,90 @@ class PdfOpenRegressionTests(unittest.TestCase):
                     viewer.close()
                     self.app.processEvents()
 
+
+    def test_next_and_previous_page_render_the_selected_page(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "navigation-colors.pdf"
+            document = fitz.open()
+            colors = [(1, 0, 0), (0, 1, 0), (0, 0, 1)]
+            for color in colors:
+                page = document.new_page(width=595, height=842)
+                page.draw_rect(fitz.Rect(50, 50, 545, 792), color=color, fill=color)
+            document.save(str(path))
+            document.close()
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                try:
+                    viewer.resize(1280, 850)
+                    viewer.show()
+                    self.app.processEvents()
+                    viewer.open_file(str(path))
+                    self.app.processEvents()
+                    self.assertEqual(viewer.current_page, 0)
+
+                    def center_pixel():
+                        pixmap = viewer.page_label.pixmap()
+                        self.assertIsNotNone(pixmap)
+                        self.assertFalse(pixmap.isNull())
+                        image = pixmap.toImage()
+                        x = min(pixmap.width() - 1, max(1, int(250 * viewer.zoom_factor)))
+                        y = min(pixmap.height() - 1, max(1, int(300 * viewer.zoom_factor)))
+                        return image.pixelColor(x, y)
+
+                    first = center_pixel()
+                    self.assertGreater(first.red(), first.green() + 100)
+
+                    viewer.next_page()
+                    self.app.processEvents()
+                    second = center_pixel()
+                    self.assertEqual(viewer.current_page, 1)
+                    self.assertGreater(second.green(), second.red() + 100)
+
+                    viewer.go_to_page(3)
+                    self.app.processEvents()
+                    third = center_pixel()
+                    self.assertEqual(viewer.current_page, 2)
+                    self.assertGreater(third.blue(), third.red() + 100)
+
+                    viewer.prev_page()
+                    self.app.processEvents()
+                    returned = center_pixel()
+                    self.assertEqual(viewer.current_page, 1)
+                    self.assertGreater(returned.green(), returned.red() + 100)
+                finally:
+                    viewer.close()
+                    self.app.processEvents()
+
+    def test_large_page_rendering_is_limited_to_safe_raster_size(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "large-page.pdf"
+            document = fitz.open()
+            page = document.new_page(width=10000, height=10000)
+            page.insert_text((500, 500), "Large page", fontsize=120)
+            document.save(str(path))
+            document.close()
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                try:
+                    viewer.resize(1280, 850)
+                    viewer.show()
+                    self.app.processEvents()
+                    viewer.open_file(str(path))
+                    self.app.processEvents()
+                    viewer.zoom_factor = 8.0
+                    viewer.render_page()
+                    pixmap = viewer.page_label.pixmap()
+                    self.assertIsNotNone(pixmap)
+                    self.assertFalse(pixmap.isNull())
+                    self.assertLess(viewer.zoom_factor, 8.0)
+                    self.assertLessEqual(pixmap.width() * pixmap.height(), 16_000_000)
+                    self.assertLessEqual(max(pixmap.width(), pixmap.height()), 12_000)
+                finally:
+                    viewer.close()
+                    self.app.processEvents()
+
     def test_mouse_wheel_scrolls_and_crosses_pages_without_blank_canvas(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "long-document.pdf"

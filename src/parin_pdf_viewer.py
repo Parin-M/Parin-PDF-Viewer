@@ -3,6 +3,7 @@ import sys
 import re
 import os
 import tempfile
+import math
 from collections import OrderedDict
 from pathlib import Path
 import pymupdf as fitz  # PyMuPDF (modern API; avoids deprecated fitz import)
@@ -14,7 +15,7 @@ from PySide6.QtWidgets import (
     QComboBox, QSlider, QTabWidget, QFormLayout, QGroupBox, QDialogButtonBox,
     QRadioButton, QButtonGroup, QAbstractItemView, QListWidget, QListWidgetItem, QTreeWidget, QTreeWidgetItem, QDockWidget, QStackedWidget, QFrame, QToolButton, QSizePolicy, QStyle, QGraphicsOpacityEffect, QGraphicsDropShadowEffect, QGridLayout
 )
-from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen, QPainterPath
+from PySide6.QtGui import QImage, QPixmap, QAction, QColor, QPainter, QMouseEvent, QIcon, QFont, QLinearGradient, QPen, QPainterPath, QPalette
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtPrintSupport import QPrinter, QPrintDialog
 from parin_pdf_helpers import APP_VERSION, add_recent_file, normalize_recent_files, ensure_pdf_extension, same_path, clamp_zoom
@@ -90,6 +91,10 @@ THEME_DEFINITIONS = [
     ('Plum', 'Plum', '#784C9D', '#F2EBF8', '#FCFAFF'),
     ('Tulip', 'Tulip', '#C85C8E', '#FFF0F6', '#FFFAFD'),
 ]
+
+MAX_PDF_RENDER_PIXELS = 16_000_000
+MAX_PDF_RENDER_DIMENSION = 12_000
+
 
 def _build_light_theme(accent, soft, surface):
     # Shared visual system: calm surfaces, clear focus states, and consistent controls.
@@ -411,7 +416,6 @@ def card_frame(title, subtitle=""):
     h = QLabel(str(title))
     h.setObjectName("settingsCardTitle")
     h.setTextFormat(Qt.PlainText)
-    h.setStyleSheet("color:#172233; background:transparent;")
     h.setVisible(True)
     h.setMinimumHeight(30)
     h.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -421,7 +425,6 @@ def card_frame(title, subtitle=""):
         sub.setObjectName("settingsCardSubtitle")
         sub.setTextFormat(Qt.PlainText)
         sub.setWordWrap(True)
-        sub.setStyleSheet("color:#69778A; background:transparent;")
         sub.setVisible(True)
         sub.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         lay.addWidget(sub)
@@ -1011,8 +1014,19 @@ class ParinPDFViewer(QMainWindow):
         hero_bottom = "#14263E" if dark else "#F0F6FD"
         text_main = "#EAF1FA" if dark else "#20324A"
         text_muted = "#A8B8CC" if dark else "#718198"
+        palette = self.palette()
+        palette.setColor(QPalette.Window, QColor(canvas))
+        palette.setColor(QPalette.WindowText, QColor(text_main))
+        palette.setColor(QPalette.Text, QColor(text_main))
+        palette.setColor(QPalette.Button, QColor(panel_bg))
+        palette.setColor(QPalette.ButtonText, QColor(text_main))
+        palette.setColor(QPalette.Base, QColor(search_bg))
+        palette.setColor(QPalette.ToolTipText, QColor("#FFFFFF"))
+        self.setPalette(palette)
         header_end = "#142B48" if dark else "#1A3A62"
-        common=f'''QWidget{{font-family:"Inter","Noto Sans","Segoe UI",sans-serif;font-size:10pt;}}
+        common=f'''QWidget{{font-family:"Inter","Noto Sans","Segoe UI",sans-serif;font-size:10pt;color:{text_main};}}
+QLabel{{color:{text_main};background:transparent;}}
+QCheckBox,QRadioButton,QGroupBox,QDockWidget{{color:{text_main};}}
 QMainWindow{{background:{canvas};}}
 QFrame#app_header{{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0:{header_bg},stop:1:{header_end});border-bottom:1px solid {header_border};}}
 QLabel#brand_title{{font-size:25px;font-weight:800;color:#FFFFFF;letter-spacing:0.4px;}}
@@ -1878,6 +1892,19 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         text_color = "#FFFFFF" if self.selected_color.lightness() < 128 else "#000000"
         self.btn_color.setStyleSheet(f"background-color: {hex_color}; color: {text_color}; border-radius: 8px;")
 
+    @staticmethod
+    def _preflight_pdf_page(document, page_index=0):
+        """Verify a candidate PDF can rasterize before replacing the current document."""
+        page = document.load_page(page_index)
+        width = max(1.0, float(page.rect.width))
+        height = max(1.0, float(page.rect.height))
+        scale = min(0.25, MAX_PDF_RENDER_DIMENSION / max(width, height), math.sqrt(1_000_000 / (width * height)))
+        if scale <= 0:
+            raise RuntimeError("The PDF page has invalid dimensions.")
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csRGB, alpha=False)
+        if pix.width < 1 or pix.height < 1 or pix.n != 3 or len(pix.samples) < pix.stride * pix.height:
+            raise RuntimeError("The PDF renderer returned an invalid page image.")
+
     def open_file(self, selected_path=None, restore_session=False):
         file_path = selected_path
         if not file_path:
@@ -1915,6 +1942,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                         )
             if candidate.page_count < 1:
                 raise ValueError("The PDF contains no readable pages.")
+            self._preflight_pdf_page(candidate, 0)
             if not self._confirm_unsaved_changes():
                 candidate.close()
                 return
@@ -2001,13 +2029,40 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         try:
             page_changed = getattr(self, "_last_rendered_page_index", None) != self.current_page
             page = self.doc.load_page(self.current_page)
-            self.zoom_factor = clamp_zoom(self.zoom_factor)
+            requested_zoom = clamp_zoom(self.zoom_factor)
+            page_width, page_height = self._effective_page_size(page)
+            if page_width <= 0 or page_height <= 0:
+                raise RuntimeError("The PDF page has invalid dimensions.")
+
+            # Bound raster allocations for oversized pages and high zoom levels.
+            max_zoom_by_edge = MAX_PDF_RENDER_DIMENSION / max(page_width, page_height)
+            max_zoom_by_pixels = math.sqrt(MAX_PDF_RENDER_PIXELS / (page_width * page_height))
+            safe_zoom = min(requested_zoom, max_zoom_by_edge, max_zoom_by_pixels)
+            if safe_zoom < 0.1:
+                raise RuntimeError("This page is too large to render safely at the minimum zoom level.")
+            self.zoom_factor = safe_zoom
+            if safe_zoom < requested_zoom:
+                self.statusBar().showMessage(
+                    f"Zoom reduced to {safe_zoom * 100:.0f}% to render this large page safely.",
+                    5000,
+                )
+
             mat = fitz.Matrix(self.zoom_factor, self.zoom_factor).prerotate(self.rotation)
-            pix = page.get_pixmap(matrix=mat, alpha=False)
+            pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB, alpha=False, annots=True)
+            if pix.width < 1 or pix.height < 1 or pix.n != 3:
+                raise RuntimeError("The PDF renderer returned an invalid RGB page image.")
+            if pix.width * pix.height > MAX_PDF_RENDER_PIXELS:
+                raise RuntimeError("The rendered page exceeded the safe pixel limit.")
+            if pix.stride < pix.width * 3 or len(pix.samples) < pix.stride * pix.height:
+                raise RuntimeError("The PDF renderer returned incomplete pixel data.")
+
             img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888).copy()
             rendered_pixmap = QPixmap.fromImage(img)
             if rendered_pixmap.isNull() or rendered_pixmap.width() < 1 or rendered_pixmap.height() < 1:
                 raise RuntimeError("The PDF page renderer returned an empty image.")
+            self.page_label.setMinimumSize(0, 0)
+            self.page_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+            self.page_label.setText("")
             self.page_label.setPixmap(rendered_pixmap)
             # Keep widget geometry in sync with the exact rendered image. The
             # scroll area then scrolls the entire page instead of resizing/clipping
@@ -2028,7 +2083,12 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.page_label.update()
             self._persist_reading_position()
         except Exception as exc:
-            self.statusBar().showMessage(f"Could not render page {self.current_page + 1}: {exc}", 6000)
+            # Never leave the previous page visible when the requested page failed.
+            self.page_label.clear()
+            self.page_label.setAlignment(Qt.AlignCenter)
+            self.page_label.setMinimumSize(self.scroll_area.viewport().size().expandedTo(QSize(240, 160)))
+            self.page_label.setText(f"Could not render page {self.current_page + 1}.\\n{exc}")
+            self.statusBar().showMessage(f"Could not render page {self.current_page + 1}: {exc}", 8000)
 
     def get_pdf_coords(self,pos: QPointF):
         pix=self.page_label.pixmap()
