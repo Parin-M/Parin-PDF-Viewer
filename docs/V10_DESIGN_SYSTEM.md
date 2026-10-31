@@ -41,9 +41,10 @@ Inspector reports the open file, page count, current page, page dimensions, titl
 author, subject and save state, and exposes quick actions routed to the existing PDF
 operations.
 
-Focus Studio, Research Studio, Compare Studio and Document Hub currently show an
-explicit **IN DEVELOPMENT** state. Switching away from Reader Studio does not close
-or discard the open PDF; returning to Reader restores the existing reader widget.
+Focus Studio, Research Studio and Compare Studio are now functional
+workspace modules. Document Hub reuses the recent-document welcome view. Switching
+between workspaces does not close the Reader's open PDF; Compare Studio maintains its
+own two independent, read-only PDF handles and releases them when the application closes.
 
 
 ## Focus Studio
