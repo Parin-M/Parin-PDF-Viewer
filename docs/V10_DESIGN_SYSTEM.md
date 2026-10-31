@@ -160,3 +160,14 @@ the list and dialogs, but submits a validated plan to the service. Extraction
 writes through the transactional save service, so an existing destination is
 replaced only after the extracted PDF has been reopened and validated. The
 Reader continues to own undo checkpoints, active-page selection and UI refresh.
+
+
+### Source PDF authentication for page insertion
+
+The Reader now opens source PDFs for page insertion through the shared
+`document_service.py`, rather than duplicating file opening, empty-password
+handling, authentication retries and first-page validation in the UI method.
+A cancelled password prompt leaves the destination untouched. The insertion
+itself continues through `page_operations.py`; if the underlying page import
+fails after mutation begins and an undo checkpoint was recorded, the Reader
+restores that checkpoint before reporting the error.

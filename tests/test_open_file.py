@@ -412,5 +412,87 @@ class PdfOpenRegressionTests(unittest.TestCase):
                     self.app.processEvents()
 
 
+    @staticmethod
+    def _make_encrypted_pdf(path, password):
+        document = fitz.open()
+        page = document.new_page()
+        page.insert_text((72, 72), "Protected insert source")
+        document.save(
+            str(path),
+            encryption=fitz.PDF_ENCRYPT_AES_256,
+            owner_pw="owner-secret",
+            user_pw=password,
+        )
+        document.close()
+
+    def test_insert_pages_uses_document_service_after_password_authentication(self):
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "destination.pdf"
+            source = Path(folder) / "protected-source.pdf"
+            self._make_pdf(destination)
+            self._make_encrypted_pdf(source, "insert-secret")
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                try:
+                    viewer.open_file(str(destination))
+                    original_document = viewer.doc
+                    with (
+                        patch(
+                            "parin_pdf_viewer.QFileDialog.getOpenFileName",
+                            return_value=(str(source), "PDF"),
+                        ),
+                        patch(
+                            "parin_pdf_viewer.QInputDialog.getText",
+                            side_effect=[("wrong-secret", True), ("insert-secret", True)],
+                        ),
+                        patch("parin_pdf_viewer.QMessageBox.critical") as critical,
+                    ):
+                        viewer.insert_pages_from_pdf()
+
+                    self.assertIs(viewer.doc, original_document)
+                    self.assertEqual(viewer.doc.page_count, 2)
+                    self.assertIn(
+                        "Protected insert source",
+                        viewer.doc.load_page(1).get_text(),
+                    )
+                    critical.assert_called_once()
+                finally:
+                    viewer.close()
+                    self.app.processEvents()
+
+    def test_cancelled_source_password_does_not_change_destination(self):
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "destination.pdf"
+            source = Path(folder) / "protected-source.pdf"
+            self._make_pdf(destination)
+            self._make_encrypted_pdf(source, "insert-secret")
+
+            with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+                viewer = ParinPDFViewer()
+                try:
+                    viewer.open_file(str(destination))
+                    original_document = viewer.doc
+                    with (
+                        patch(
+                            "parin_pdf_viewer.QFileDialog.getOpenFileName",
+                            return_value=(str(source), "PDF"),
+                        ),
+                        patch(
+                            "parin_pdf_viewer.QInputDialog.getText",
+                            return_value=("", False),
+                        ),
+                        patch.object(viewer, "_record_undo") as record_undo,
+                    ):
+                        viewer.insert_pages_from_pdf()
+
+                    self.assertIs(viewer.doc, original_document)
+                    self.assertEqual(viewer.doc.page_count, 1)
+                    record_undo.assert_not_called()
+                finally:
+                    viewer.close()
+                    self.app.processEvents()
+
+
 if __name__ == "__main__":
     unittest.main()

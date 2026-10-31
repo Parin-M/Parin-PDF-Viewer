@@ -1349,37 +1349,69 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         if not self.doc:
             QMessageBox.information(self, "Insert pages", "Open a destination PDF first.")
             return
-        source_path, _ = QFileDialog.getOpenFileName(self, "Insert pages from PDF", "", "PDF documents (*.pdf)")
+        source_path, _ = QFileDialog.getOpenFileName(
+            self, "Insert pages from PDF", "", "PDF documents (*.pdf)"
+        )
         if not source_path:
             return
+
+        opened_source = None
         source = None
+        undo_recorded = False
+        insertion_started = False
         try:
-            source = fitz.open(source_path)
-            if _is_document_encrypted(source) and getattr(source, "needs_pass", False) and not source.authenticate(""):
-                while True:
+            password = None
+            while True:
+                try:
+                    opened_source = open_pdf_document(
+                        source_path,
+                        password=password,
+                    )
+                    break
+                except PasswordRequiredError:
                     password, ok = QInputDialog.getText(
-                        self, "Unlock source PDF", "Enter the source PDF password:", QLineEdit.Password
+                        self,
+                        "Unlock source PDF",
+                        "Enter the source PDF password:",
+                        QLineEdit.Password,
                     )
                     if not ok:
                         return
-                    if source.authenticate(password):
-                        break
-                    QMessageBox.critical(self, "Insert pages", "The source PDF password is incorrect.")
-            if source.page_count < 1:
-                QMessageBox.information(self, "Insert pages", "The selected PDF has no pages to insert.")
-                return
-            self._record_undo()
+                except IncorrectPasswordError:
+                    QMessageBox.critical(
+                        self,
+                        "Insert pages",
+                        "The source PDF password is incorrect.",
+                    )
+                    password = None
+
+            source = opened_source.document
             insert_at = self.current_page + 1
-            inserted_count = source.page_count
-            inserted_count = insert_pdf_pages(self.doc, source, start_at=insert_at)
+            undo_recorded = self._record_undo()
+            insertion_started = True
+            inserted_count = insert_pdf_pages(
+                self.doc,
+                source,
+                start_at=insert_at,
+            )
             self.current_page = insert_at
             self._after_document_structure_change()
-            self.statusBar().showMessage(f"Inserted {inserted_count} page(s) from {Path(source_path).name}", 6000)
+            self.statusBar().showMessage(
+                f"Inserted {inserted_count} page(s) from "
+                f"{Path(opened_source.file_path).name}",
+                6000,
+            )
         except Exception as exc:
+            # Restore the undo checkpoint if PyMuPDF failed during mutation.
+            if insertion_started and undo_recorded:
+                self.undo_edit()
             QMessageBox.critical(self, "Insert pages failed", str(exc))
         finally:
             if source is not None:
-                source.close()
+                try:
+                    source.close()
+                except Exception:
+                    pass
 
     def _after_document_structure_change(self):
         if not self.doc or self.doc.page_count < 1:
