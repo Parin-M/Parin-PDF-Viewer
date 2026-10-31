@@ -12,6 +12,25 @@ from parin_ui.theme_tokens import available_theme_modes, get_theme_tokens
 from parin_ui.workspace_shell import ParinWorkspaceShell
 
 
+class _MemorySettings:
+    """Isolated QSettings stand-in for the main-window integration smoke test."""
+
+    def __init__(self, *args, **kwargs):
+        self.values = {}
+
+    def value(self, key, defaultValue=None, type=None):
+        value = self.values.get(key, defaultValue)
+        if type is not None and value is not None:
+            try:
+                return type(value)
+            except (TypeError, ValueError):
+                return defaultValue
+        return value
+
+    def setValue(self, key, value):
+        self.values[key] = value
+
+
 class ThemeTokenTests(unittest.TestCase):
     def test_dark_and_light_tokens_are_distinct(self):
         dark = get_theme_tokens("dark")
