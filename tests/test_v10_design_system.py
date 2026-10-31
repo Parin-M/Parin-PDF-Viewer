@@ -701,5 +701,114 @@ class CompareStudioTests(unittest.TestCase):
                 self.app.processEvents()
 
 
+class PageOrganizerDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _make_document(self, labels=("Page one", "Page two", "Page three")):
+        import pymupdf as fitz
+        document = fitz.open()
+        for label in labels:
+            page = document.new_page()
+            page.insert_text((72, 72), label)
+        return document
+
+    def _make_viewer(self, document):
+        class Viewer(QWidget):
+            def __init__(self, doc):
+                super().__init__()
+                self.doc = doc
+                self.current_page = 0
+                self.file_path = ""
+                self.undo_records = 0
+                self.structure_updates = 0
+                self.undo_calls = 0
+
+            def _record_undo(self):
+                self.undo_records += 1
+
+            def _after_document_structure_change(self):
+                self.structure_updates += 1
+
+            def undo_edit(self):
+                self.undo_calls += 1
+
+        return Viewer(document)
+
+    def test_reorder_pages_is_applied_transactionally_and_updates_current_page(self):
+        from PySide6.QtCore import Qt
+        from parin_ui.page_organizer import PageOrganizerDialog
+
+        document = self._make_document()
+        viewer = self._make_viewer(document)
+        viewer.current_page = 1
+        dialog = PageOrganizerDialog(viewer)
+        try:
+            moved = dialog.pages.takeItem(1)
+            dialog.pages.insertItem(0, moved)
+            dialog.apply_changes()
+            self.assertIn("Page two", document.load_page(0).get_text())
+            self.assertEqual(viewer.current_page, 0)
+            self.assertEqual(viewer.undo_records, 1)
+            self.assertEqual(viewer.structure_updates, 1)
+            self.assertEqual(viewer.undo_calls, 0)
+        finally:
+            dialog.close()
+            viewer.close()
+            document.close()
+
+    def test_rotation_is_staged_until_apply(self):
+        from unittest.mock import patch
+        from parin_ui.page_organizer import PageOrganizerDialog
+
+        document = self._make_document(("Rotate me",))
+        viewer = self._make_viewer(document)
+        dialog = PageOrganizerDialog(viewer)
+        try:
+            dialog.pages.item(0).setSelected(True)
+            dialog.rotate_selected()
+            self.assertEqual(dialog.rotations[0], 90)
+            self.assertEqual(document.load_page(0).rotation, 0)
+            with patch("parin_ui.page_organizer.QMessageBox.critical") as critical:
+                dialog.apply_changes()
+            critical.assert_not_called()
+            self.assertEqual(document.load_page(0).rotation, 90)
+            self.assertEqual(viewer.undo_records, 1)
+        finally:
+            dialog.close()
+            viewer.close()
+            document.close()
+
+    def test_empty_page_list_is_rejected_without_mutating_document(self):
+        from unittest.mock import patch
+        from parin_ui.page_organizer import PageOrganizerDialog
+
+        document = self._make_document(("Keep one", "Keep two"))
+        viewer = self._make_viewer(document)
+        dialog = PageOrganizerDialog(viewer)
+        try:
+            for row in range(dialog.pages.count()):
+                dialog.pages.item(row).setSelected(True)
+            dialog.remove_selected()
+            self.assertEqual(dialog.pages.count(), 0)
+            with patch("parin_ui.page_organizer.QMessageBox.warning") as warning:
+                dialog.apply_changes()
+            warning.assert_called_once()
+            self.assertEqual(document.page_count, 2)
+            self.assertEqual(viewer.undo_records, 0)
+            self.assertEqual(viewer.structure_updates, 0)
+        finally:
+            dialog.close()
+            viewer.close()
+            document.close()
+
+    def test_main_module_keeps_page_organizer_import_compatible(self):
+        from parin_pdf_viewer import PageOrganizerDialog as MainPageOrganizerDialog
+        from parin_ui.page_organizer import PageOrganizerDialog
+
+        self.assertIs(MainPageOrganizerDialog, PageOrganizerDialog)
+
+
 if __name__ == "__main__":
     unittest.main()
