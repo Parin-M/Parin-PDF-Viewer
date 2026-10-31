@@ -967,6 +967,7 @@ class NavigationPanelControllerTests(unittest.TestCase):
 
     def _make_viewer(self):
         import pymupdf as fitz
+        from PySide6.QtCore import Qt
         from PySide6.QtGui import QAction
         from PySide6.QtWidgets import QMainWindow, QMenu
 
@@ -1006,6 +1007,10 @@ class NavigationPanelControllerTests(unittest.TestCase):
         viewer, document = self._make_viewer()
         controller = NavigationPanelController(viewer, NAVIGATION_I18N)
         try:
+            self.assertIs(viewer.navigation_dock, controller.dock)
+            self.assertIs(viewer.navigation_tabs, controller.tabs)
+            self.assertIs(viewer.page_list, controller.page_list)
+            self.assertIs(viewer._thumbnail_cache, controller.thumbnail_cache)
             viewer.show()
             controller.dock.show()
             self.app.processEvents()
