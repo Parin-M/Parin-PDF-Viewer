@@ -216,7 +216,7 @@ class ResearchStudio(QWidget):
     ) -> None:
         path = str(document_path or "")
         identity = (path, id(document)) if document is not None else None
-        if identity == self._document_identity:
+        if identity is not None and identity == self._document_identity:
             self.set_current_page(current_page)
             return
 

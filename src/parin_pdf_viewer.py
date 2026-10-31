@@ -1385,6 +1385,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                 self.doc,
                 self.current_page,
             )
+            self.research_studio.refresh_highlights()
             self.v10_shell.set_workspace_widget(self.research_studio)
             return
         self.v10_shell.set_focus_mode(False)
@@ -2493,6 +2494,10 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
 
     def go_to_page(self, val):
         if self.doc and 1 <= val <= self.doc.page_count:
+            if hasattr(self, "spin_page") and self.spin_page.value() != val:
+                self.spin_page.blockSignals(True)
+                self.spin_page.setValue(val)
+                self.spin_page.blockSignals(False)
             self.current_page = val - 1
             if self._last_search_page != self.current_page:
                 self.search_highlight = None

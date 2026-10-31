@@ -488,5 +488,23 @@ class ResearchStudioTests(unittest.TestCase):
             studio.close()
 
 
+    def test_research_workspace_is_mounted_and_empty_state_is_safe(self):
+        from unittest.mock import patch
+        from parin_pdf_viewer import ParinPDFViewer
+        from parin_ui.research_studio import ResearchStudio
+
+        with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+            viewer = ParinPDFViewer()
+            try:
+                viewer.v10_shell.set_active_workspace("research")
+                self.assertIsInstance(viewer.v10_shell._workspace_widget, ResearchStudio)
+                self.assertIs(viewer.research_studio.document, None)
+                self.assertFalse(viewer.research_studio.save_button.isEnabled())
+                self.assertEqual(viewer.v10_shell.active_workspace, "research")
+            finally:
+                viewer.close()
+                self.app.processEvents()
+
+
 if __name__ == "__main__":
     unittest.main()
