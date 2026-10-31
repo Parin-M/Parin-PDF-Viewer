@@ -907,7 +907,7 @@ class SettingsLocalizationTests(unittest.TestCase):
     def test_settings_locales_include_farsi_and_german(self):
         from parin_ui.settings_i18n import SETTINGS_I18N
 
-        self.assertIn("فا", SETTINGS_I18N["fa"]["title"][:3])
+        self.assertIn("تنظیمات", SETTINGS_I18N["fa"]["title"])
         self.assertIn("Übersicht", SETTINGS_I18N["de"]["overview"])
         self.assertEqual(SETTINGS_I18N["fa"]["appearance_mode"], "حالت ظاهری")
         self.assertEqual(SETTINGS_I18N["en"]["appearance_mode"], "Appearance mode")
