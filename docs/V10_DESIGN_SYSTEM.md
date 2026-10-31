@@ -50,3 +50,10 @@ Focus Studio is now a functional reader mode. It reuses the currently open PDF
 viewport, collapses the main action toolbar, navigation and inspector panels, and
 keeps the compact context strip with an explicit **Exit Focus** action. Returning
 to Reader Studio restores the responsive panels and the same document widget.
+
+
+## Document Hub
+
+Document Hub now reuses the localized welcome view and its recent-document cards
+and page-one previews. Opening a PDF from the Hub returns to Reader Studio; moving
+between Hub and Reader does not close the in-memory PDF document.

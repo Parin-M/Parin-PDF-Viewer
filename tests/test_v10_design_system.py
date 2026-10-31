@@ -283,6 +283,31 @@ class IntegratedV10ShellTests(unittest.TestCase):
         self.assertEqual(page.status.text(), "IN DEVELOPMENT")
 
 
+    def test_document_hub_reuses_recent_documents_and_preserves_reader(self):
+        from parin_pdf_viewer import ParinPDFViewer
+        from unittest.mock import patch
+
+        class DummyDocument:
+            def close(self):
+                pass
+
+        with patch("parin_pdf_viewer.QSettings", _MemorySettings):
+            viewer = ParinPDFViewer()
+            try:
+                viewer.doc = DummyDocument()
+                viewer.v10_shell.set_active_workspace("hub")
+                self.assertEqual(viewer.v10_shell.workspace_title.text(), "Document Hub")
+                self.assertIs(viewer.v10_shell._workspace_widget, viewer.workspace_stack)
+                self.assertIs(viewer.workspace_stack.currentWidget(), viewer.welcome_page)
+
+                viewer.v10_shell.set_active_workspace("reader")
+                self.assertIs(viewer.workspace_stack.currentWidget(), viewer.scroll_area)
+                self.assertIs(viewer.doc.__class__, DummyDocument)
+            finally:
+                viewer.close()
+                self.app.processEvents()
+
+
     def test_focus_studio_keeps_pdf_widget_and_can_return_to_reader(self):
         from parin_pdf_viewer import ParinPDFViewer
         from unittest.mock import patch

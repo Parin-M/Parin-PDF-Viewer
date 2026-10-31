@@ -1353,12 +1353,21 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         if workspace_id == "reader":
             self.v10_shell.set_focus_mode(False)
             self.v10_shell.set_workspace_widget(self.workspace_stack)
+            self.workspace_stack.setCurrentWidget(
+                self.scroll_area if self.doc is not None else self.welcome_page
+            )
             return
         if workspace_id == "focus":
             self.v10_shell.set_workspace_widget(self.workspace_stack)
             self.v10_shell.set_focus_mode(True)
             if self.doc is not None:
                 QTimer.singleShot(0, self.fit_width)
+            return
+        if workspace_id == "hub":
+            self.v10_shell.set_focus_mode(False)
+            self.v10_shell.set_workspace_widget(self.workspace_stack)
+            self.workspace_stack.setCurrentWidget(self.welcome_page)
+            self._refresh_welcome_page()
             return
         self.v10_shell.set_focus_mode(False)
         landing = self._v10_studio_widgets.get(workspace_id)
@@ -2118,6 +2127,11 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self._refresh_navigation()
             if hasattr(self,'workspace_stack'):
                 self.workspace_stack.setCurrentWidget(self.scroll_area)
+            if (
+                hasattr(self, "v10_shell")
+                and self.v10_shell.active_workspace not in ("reader", "focus")
+            ):
+                self.v10_shell.set_active_workspace("reader")
             # Wait for the PDF workspace to become visible before rasterizing.
             # A hidden QScrollArea can report stale viewport geometry during the
             # welcome-to-document transition and leave its first page unpainted.
