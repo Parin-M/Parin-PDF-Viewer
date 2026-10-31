@@ -810,5 +810,93 @@ class PageOrganizerDialogTests(unittest.TestCase):
         self.assertIs(MainPageOrganizerDialog, PageOrganizerDialog)
 
 
+class SettingsDialogModuleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _resources(self):
+        import parin_pdf_viewer as legacy
+        from parin_ui.settings_dialog import SettingsDialogResources
+
+        return SettingsDialogResources(
+            settings_i18n=legacy.SETTINGS_I18N,
+            color_themes=tuple(legacy.COLOR_THEMES),
+            theme_accents=legacy.THEME_ACCENTS,
+            theme_stylesheet=legacy._theme_stylesheet,
+            app_version=legacy.APP_VERSION,
+            about_attribution=legacy.ABOUT_ATTRIBUTION,
+            make_app_icon=legacy.make_app_icon,
+            card_frame=legacy.card_frame,
+        )
+
+    def _viewer(self):
+        class SettingsViewer(QWidget):
+            def __init__(self):
+                super().__init__()
+                self.current_lang = "en"
+                self.app_settings = {
+                    "appearance_mode": "light",
+                    "theme": "Arctic Glass",
+                    "accent": "Theme default",
+                }
+                self.language_changes = []
+                self.apply_count = 0
+
+            def apply_language(self, code):
+                self.current_lang = code
+                self.language_changes.append(code)
+
+            def apply_app_settings(self):
+                self.apply_count += 1
+
+        return SettingsViewer()
+
+    def test_settings_dialog_uses_injected_resources_and_localizes(self):
+        from parin_ui.settings_dialog import SettingsDialog
+
+        viewer = self._viewer()
+        dialog = SettingsDialog(viewer, self._resources())
+        try:
+            self.assertIn("Parin", dialog.title.text())
+            dialog._language_from_settings(1)
+            self.assertEqual(viewer.language_changes, ["fa"])
+            self.assertIn("پرین", dialog.title.text())
+            self.assertEqual(dialog.lang, "fa")
+        finally:
+            dialog.close()
+            viewer.close()
+
+    def test_settings_dialog_collect_and_apply_preserve_preferences(self):
+        from parin_ui.settings_dialog import SettingsDialog
+
+        viewer = self._viewer()
+        dialog = SettingsDialog(viewer, self._resources())
+        try:
+            dialog.appearance_mode.setCurrentIndex(1)
+            dialog.remember_last.setChecked(False)
+            dialog.volume.setValue(37)
+            result = dialog.collect()
+            self.assertEqual(result["appearance_mode"], "dark")
+            self.assertFalse(result["remember_last"])
+            self.assertEqual(result["volume"], 37)
+
+            dialog.apply_changes()
+            self.assertEqual(viewer.app_settings["appearance_mode"], "dark")
+            self.assertFalse(viewer.app_settings["remember_last"])
+            self.assertEqual(viewer.app_settings["volume"], 37)
+            self.assertEqual(viewer.apply_count, 1)
+        finally:
+            dialog.close()
+            viewer.close()
+
+    def test_main_module_preserves_settings_dialog_import_compatibility(self):
+        from parin_pdf_viewer import SettingsDialog as MainSettingsDialog
+        from parin_ui.settings_dialog import SettingsDialog
+
+        self.assertIs(MainSettingsDialog, SettingsDialog)
+
+
+
 if __name__ == "__main__":
     unittest.main()
