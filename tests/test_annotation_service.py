@@ -123,12 +123,13 @@ class AnnotationServiceTests(unittest.TestCase):
         snapshot = self.document.tobytes(deflate=True)
         reopened = fitz.open(stream=snapshot, filetype="pdf")
         try:
-            annotations = list(reopened.load_page(0).annots() or ())
-            self.assertEqual(len(annotations), 240)
-            self.assertEqual(
-                sum(annotation.type[1] == "FreeText" for annotation in annotations),
-                120,
-            )
+            reopened_page = reopened.load_page(0)
+            annotation_types = [
+                annotation.type[1]
+                for annotation in (reopened_page.annots() or ())
+            ]
+            self.assertEqual(len(annotation_types), 240)
+            self.assertEqual(annotation_types.count("FreeText"), 120)
         finally:
             reopened.close()
 

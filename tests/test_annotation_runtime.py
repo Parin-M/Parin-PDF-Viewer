@@ -87,7 +87,8 @@ class PageRenderCacheTests(unittest.TestCase):
         cache.put(("doc", 0), object(), 8)
         self.assertFalse(cache.put(("doc", 1), object(), 9))
         self.assertLessEqual(cache.current_bytes, cache.max_bytes)
-        self.assertEqual(len(cache), 0)
+        self.assertEqual(len(cache), 1)
+        self.assertIsNotNone(cache.get(("doc", 0)))
 
     def test_invalidating_a_page_is_scoped_to_document(self):
         cache = PageRenderCache(max_bytes=20)
