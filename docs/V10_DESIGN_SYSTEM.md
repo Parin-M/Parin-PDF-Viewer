@@ -136,3 +136,16 @@ least one page is readable, and rasterizes a bounded page-one sample. Failed
 candidates are closed by the service. The Reader retains the password prompt,
 unsaved-change decision and final active-document replacement, so an invalid,
 locked or cancelled candidate cannot displace the currently open PDF.
+
+
+### PDF document save service
+
+Transactional PDF saving is isolated in the Qt-free
+src/parin_ui/document_save_service.py. The service serializes to a temporary
+file in the destination directory, applies the requested encryption policy,
+reopens and validates the candidate, authenticates it when required, and only
+then replaces the target with an atomic same-filesystem operation. It returns
+the validated open document and its encryption/page metadata. The Reader owns
+the UI handoff, closes the previous in-memory document after success, updates
+reading state, and copies local Research notes for Save As. Failed writes do
+not close or mutate the current source document.

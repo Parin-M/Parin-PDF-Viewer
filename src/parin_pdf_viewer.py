@@ -34,6 +34,7 @@ from parin_ui.settings_dialog import SettingsDialog, SettingsDialogResources
 from parin_ui.settings_i18n import SETTINGS_I18N
 from parin_ui.navigation_i18n import NAVIGATION_I18N
 from parin_ui.document_history import DocumentHistory
+from parin_ui.document_save_service import save_pdf_document
 from parin_ui.document_service import (
     IncorrectPasswordError,
     PasswordRequiredError,
@@ -2110,88 +2111,58 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             return False
 
         save_path = ensure_pdf_extension(os.path.abspath(os.path.expanduser(save_path)))
-        output_dir = os.path.dirname(save_path) or os.getcwd()
-        source_password = self._document_password
-        source_encrypted = bool(self._document_encrypted)
         old_doc = self.doc
-        page_to_restore = self.current_page
-        temp_path = None
-        candidate_doc = None
-
+        previous_file_path = self.file_path
         try:
-            fd, temp_path = tempfile.mkstemp(prefix=".parin-pdf-", suffix=".pdf", dir=output_dir)
-            os.close(fd)
-            os.unlink(temp_path)
-
-            options = {"garbage": 0 if self.large_file_mode else 4, "deflate": True}
-            if save_options:
-                options.update(save_options)
-            elif source_encrypted:
-                # Preserve encryption even when the PDF's user password is empty.
-                options["encryption"] = fitz.PDF_ENCRYPT_KEEP
-
-            old_doc.save(temp_path, **options)
-
-            # Validate the output while the original document is still usable.
-            candidate_doc = fitz.open(temp_path)
-            candidate_encrypted = _is_document_encrypted(candidate_doc)
-            candidate_password = source_password if password_after is None else password_after
-            if candidate_encrypted and getattr(candidate_doc, "needs_pass", False) and not candidate_doc.authenticate(candidate_password):
-                raise RuntimeError("The saved PDF could not be unlocked with the active password.")
-            if candidate_doc.page_count < 1:
-                raise RuntimeError("The saved PDF contains no readable pages.")
-            target_page = min(page_to_restore, candidate_doc.page_count - 1)
-            candidate_doc.load_page(target_page)
-
-            # Atomic replacement happens only after the new file is valid.
-            os.replace(temp_path, save_path)
-            temp_path = None
-
+            saved = save_pdf_document(
+                old_doc,
+                save_path,
+                page_index=self.current_page,
+                encrypted=bool(self._document_encrypted),
+                source_password=self._document_password,
+                password_after=password_after,
+                large_file_mode=self.large_file_mode,
+                save_options=save_options,
+            )
         except Exception as exc:
-            if candidate_doc is not None:
-                try:
-                    candidate_doc.close()
-                except Exception:
-                    pass
-            if temp_path and os.path.exists(temp_path):
-                try:
-                    os.unlink(temp_path)
-                except OSError:
-                    pass
-            QMessageBox.critical(self, "Save failed", f"Could not save the PDF.\\n\\n{exc}")
+            QMessageBox.critical(
+                self,
+                "Save failed",
+                f"Could not save the PDF.\\n\\n{exc}",
+            )
             return False
 
-        # Commit the new in-memory document only after the replacement is validated.
-        self.doc = candidate_doc
-        candidate_doc = None
+        # The service returns only a fully validated document after atomic replace.
+        self.doc = saved.document
         try:
             old_doc.close()
         except Exception:
             pass
-        previous_file_path = self.file_path
-        self.file_path = save_path
+        self.file_path = saved.file_path
         if (
             previous_file_path
             and os.path.normcase(os.path.abspath(previous_file_path))
-            != os.path.normcase(os.path.abspath(save_path))
+            != os.path.normcase(os.path.abspath(saved.file_path))
             and hasattr(self, "research_store")
         ):
             try:
-                self.research_store.copy_document_notes(previous_file_path, save_path)
+                self.research_store.copy_document_notes(
+                    previous_file_path, saved.file_path
+                )
             except Exception as exc:
                 self.statusBar().showMessage(
                     f"Research notes were not copied: {exc}", 6000
                 )
-        self._document_password = candidate_password
-        self._document_encrypted = candidate_encrypted
+        self._document_password = saved.password
+        self._document_encrypted = saved.encrypted
         self._document_dirty = False
-        self.current_page = target_page
+        self.current_page = saved.page_index
         self._last_rendered_page_index = None
         self._thumbnail_cache.clear()
         self._refresh_navigation()
         self._apply_fit() if self.fit_mode in ("width", "page") else self.render_page()
-        self._add_recent_file(save_path)
-        self.statusBar().showMessage(f"Saved {Path(save_path).name}", 5000)
+        self._add_recent_file(saved.file_path)
+        self.statusBar().showMessage(f"Saved {Path(saved.file_path).name}", 5000)
         return True
 
     def save_file(self):
