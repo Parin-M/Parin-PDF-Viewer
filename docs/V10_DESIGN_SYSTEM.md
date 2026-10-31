@@ -181,3 +181,14 @@ ink annotations, places FreeText annotations using the Reader's existing
 sizing and page-edge rules, and erases annotations intersecting a zoom-aware
 brush. The canvas continues to own pointer events, live stroke preview,
 handwriting smoothing, undo checkpoints, notifications and rendering.
+
+
+### PDF search service
+
+The Qt-free src/parin_ui/search_service.py owns page traversal and page-local
+match selection for PDF text search. It returns an immutable match record
+containing the page index, PDF-space rectangle, zero-based match index and page
+match count. The Reader retains query input, page navigation, visual
+highlighting, localized no-result messaging and status updates. Search scans
+forward from the current match and wraps across the document without
+re-scanning earlier matches on the starting page.

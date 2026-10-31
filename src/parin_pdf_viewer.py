@@ -36,6 +36,7 @@ from parin_ui.annotation_service import (
     add_text_annotation,
     erase_annotations_at_point,
 )
+from parin_ui.search_service import find_next_match
 from parin_ui.settings_dialog import SettingsDialog, SettingsDialogResources
 from parin_ui.settings_i18n import SETTINGS_I18N
 from parin_ui.navigation_i18n import NAVIGATION_I18N
@@ -1850,7 +1851,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
         if ok and text.strip(): self._search_query(text.strip())
 
     def _search_query(self, q):
-        if not self.doc or not q.strip():
+        if not self.doc or not isinstance(q, str) or not q.strip():
             return
         q = q.strip()
         page_count = self.doc.page_count
@@ -1858,31 +1859,39 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             return
         same_query = q.casefold() == self._last_search_query.casefold() and self._last_search_page == self.current_page
         start_page = self.current_page
-        start_rect = self._last_search_rect_index + 1 if same_query else 0
-        for offset in range(page_count):
-            page_index = (start_page + offset) % page_count
-            try:
-                page = self.doc.load_page(page_index)
-                matches = page.search_for(q)
-            except Exception as exc:
-                self.statusBar().showMessage(f"Search failed: {exc}", 5000)
-                return
-            match_index = start_rect if offset == 0 else 0
-            if match_index < len(matches):
-                self.current_page = page_index
-                self.spin_page.blockSignals(True)
-                self.spin_page.setValue(page_index + 1)
-                self.spin_page.blockSignals(False)
-                self._last_search_query = q
-                self._last_search_page = page_index
-                self._last_search_rect_index = match_index
-                self.search_highlight = {"page": page_index, "rect": matches[match_index]}
-                if self.fit_mode in ("width", "page"):
-                    self._apply_fit()
-                else:
-                    self.render_page()
-                self.statusBar().showMessage(f"Match {match_index + 1} of {len(matches)} on page {page_index + 1} · Enter to find next", 6000)
-                return
+        start_match = self._last_search_rect_index + 1 if same_query else 0
+        try:
+            match = find_next_match(
+                self.doc,
+                q,
+                start_page=start_page,
+                start_match_index=start_match,
+            )
+        except Exception as exc:
+            self.statusBar().showMessage(f"Search failed: {exc}", 5000)
+            return
+
+        if match is not None:
+            page_index = match.page_index
+            self.current_page = page_index
+            self.spin_page.blockSignals(True)
+            self.spin_page.setValue(page_index + 1)
+            self.spin_page.blockSignals(False)
+            self._last_search_query = q
+            self._last_search_page = page_index
+            self._last_search_rect_index = match.match_index
+            self.search_highlight = {"page": page_index, "rect": match.rect}
+            if self.fit_mode in ("width", "page"):
+                self._apply_fit()
+            else:
+                self.render_page()
+            self.statusBar().showMessage(
+                f"Match {match.match_index + 1} of {match.page_match_count} "
+                f"on page {page_index + 1} · Enter to find next",
+                6000,
+            )
+            return
+
         self.search_highlight = None
         self.page_label.update()
         QMessageBox.information(self, TRANSLATIONS[self.current_lang]["search"], TRANSLATIONS[self.current_lang]["not_found"])
