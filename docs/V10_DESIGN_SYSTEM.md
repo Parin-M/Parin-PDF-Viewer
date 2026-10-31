@@ -116,3 +116,12 @@ label normalization are isolated in the Qt-independent
 `src/parin_ui/settings_i18n.py`; the main viewer supplies appearance resources through
 `SettingsDialogResources`. The existing PDF rendering and document lifecycle remain
 in the legacy main module during the staged migration.
+
+### Document history service
+
+Undo/redo checkpoint storage is managed by the Qt-independent
+`src/parin_ui/document_history.py`. The service enforces snapshot-size and
+checkpoint-count bounds, clears redo history after a new edit, and only advances
+history stacks after the Reader confirms a snapshot restore. PDF serialization,
+encryption handling and UI refresh remain at the main-reader boundary.
+

@@ -1091,5 +1091,121 @@ class NavigationPanelControllerTests(unittest.TestCase):
 
 
 
+class DocumentHistoryTests(unittest.TestCase):
+    class FakeDocument:
+        def __init__(self, payload=b"snapshot"):
+            self.payload = payload
+            self.options = None
+            self.raise_error = False
+
+        def tobytes(self, **options):
+            self.options = options
+            if self.raise_error:
+                raise RuntimeError("snapshot failure")
+            return self.payload
+
+    def test_capture_snapshot_enforces_byte_limit_and_file_preflight(self):
+        import tempfile
+        from pathlib import Path
+        from parin_ui.document_history import DocumentHistory
+
+        history = DocumentHistory(max_snapshot_bytes=8)
+        document = self.FakeDocument(b"12345678")
+        self.assertEqual(history.capture_snapshot(document), b"12345678")
+        document.payload = b"123456789"
+        self.assertIsNone(history.capture_snapshot(document))
+
+        with tempfile.TemporaryDirectory() as folder:
+            oversized = Path(folder) / "large.pdf"
+            oversized.write_bytes(b"x" * 9)
+            document.payload = b"ok"
+            document.options = None
+            self.assertIsNone(
+                history.capture_snapshot(document, file_path=str(oversized))
+            )
+            self.assertIsNone(document.options)
+
+    def test_capture_snapshot_preserves_encryption_option(self):
+        from parin_ui.document_history import DocumentHistory
+
+        history = DocumentHistory()
+        document = self.FakeDocument()
+        snapshot = history.capture_snapshot(
+            document, encrypted=True, encryption_keep=123
+        )
+        self.assertEqual(snapshot, b"snapshot")
+        self.assertEqual(document.options["encryption"], 123)
+        self.assertTrue(document.options["deflate"])
+
+    def test_record_caps_undo_steps_and_clears_redo_branch(self):
+        from parin_ui.document_history import DocumentHistory
+
+        history = DocumentHistory(max_snapshot_bytes=32, max_undo_steps=2)
+        history.redo_stack.append(b"stale redo")
+        for state in (b"one", b"two", b"three"):
+            self.assertTrue(history.record(state))
+        self.assertEqual(history.undo_stack, [b"two", b"three"])
+        self.assertEqual(history.redo_stack, [])
+        self.assertTrue(history.can_undo)
+
+    def test_undo_and_redo_move_snapshots_only_after_successful_restore(self):
+        from parin_ui.document_history import DocumentHistory
+
+        history = DocumentHistory(max_snapshot_bytes=32, max_undo_steps=2)
+        history.record(b"before")
+        restored = []
+
+        self.assertEqual(
+            history.undo(b"after", lambda snapshot, label: restored.append((snapshot, label)) or True),
+            "restored",
+        )
+        self.assertEqual(restored, [(b"before", "Undo")])
+        self.assertEqual(history.undo_stack, [])
+        self.assertEqual(history.redo_stack, [b"after"])
+
+        self.assertEqual(
+            history.redo(b"before", lambda snapshot, label: restored.append((snapshot, label)) or True),
+            "restored",
+        )
+        self.assertEqual(restored[-1], (b"after", "Redo"))
+        self.assertEqual(history.undo_stack, [b"before"])
+        self.assertEqual(history.redo_stack, [])
+
+    def test_failed_restore_keeps_history_stacks_unchanged(self):
+        from parin_ui.document_history import DocumentHistory
+
+        history = DocumentHistory()
+        history.record(b"before")
+        self.assertEqual(history.undo(b"after", lambda *_: False), "failed")
+        self.assertEqual(history.undo_stack, [b"before"])
+        self.assertEqual(history.redo_stack, [])
+
+    def test_unavailable_snapshot_disables_history_until_reset(self):
+        from parin_ui.document_history import DocumentHistory
+
+        history = DocumentHistory(max_snapshot_bytes=8)
+        history.record(b"before")
+        self.assertEqual(history.undo(None, lambda *_: True), "unavailable")
+        self.assertTrue(history.disabled)
+        self.assertEqual(history.undo_stack, [])
+        self.assertFalse(history.record(b"next"))
+
+        history.reset()
+        self.assertFalse(history.disabled)
+        self.assertTrue(history.record(b"next"))
+
+    def test_snapshot_serialization_failure_disables_history_when_recorded(self):
+        from parin_ui.document_history import DocumentHistory
+
+        history = DocumentHistory()
+        document = self.FakeDocument()
+        document.raise_error = True
+        self.assertIsNone(history.capture_snapshot(document))
+        self.assertFalse(history.record(None))
+        self.assertTrue(history.disabled)
+
+
+
+
 if __name__ == "__main__":
     unittest.main()

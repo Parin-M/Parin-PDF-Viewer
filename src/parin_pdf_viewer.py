@@ -33,6 +33,7 @@ from parin_ui.page_organizer import PageOrganizerDialog
 from parin_ui.settings_dialog import SettingsDialog, SettingsDialogResources
 from parin_ui.settings_i18n import SETTINGS_I18N
 from parin_ui.navigation_i18n import NAVIGATION_I18N
+from parin_ui.document_history import DocumentHistory
 from parin_ui.navigation_panel import NavigationPanelController
 
 # Text helper must be defined before translation tables are normalized.
@@ -477,9 +478,11 @@ class ParinPDFViewer(QMainWindow):
             self._last_session_zoom = 1.0
         self._last_session_fit_mode = self.settings_store.value('last_fit_mode', 'width', type=str)
         self._thumbnail_cache = OrderedDict()
-        self._undo_stack = []
-        self._redo_stack = []
-        self._history_max_bytes = 16 * 1024 * 1024
+        self.document_history = DocumentHistory(max_snapshot_bytes=16 * 1024 * 1024, max_undo_steps=5)
+        # Compatibility aliases retained for legacy integrations/tests.
+        self._undo_stack = self.document_history.undo_stack
+        self._redo_stack = self.document_history.redo_stack
+        self._history_max_bytes = self.document_history.max_snapshot_bytes
         self._undo_disabled_for_size = False
         self._last_search_query = ''
         self._last_search_page = -1
@@ -1250,34 +1253,37 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
             self.statusBar().showMessage("Unsaved PDF changes", 4000)
 
 
+    @property
+    def _undo_disabled_for_size(self):
+        history = getattr(self, "document_history", None)
+        return bool(history and history.disabled)
+
+    @_undo_disabled_for_size.setter
+    def _undo_disabled_for_size(self, value):
+        history = getattr(self, "document_history", None)
+        if history is not None:
+            history.disabled = bool(value)
+
     def _snapshot_for_history(self):
-        if not self.doc or self._undo_disabled_for_size:
-            return None
-        try:
-            if self.file_path and os.path.isfile(self.file_path) and os.path.getsize(self.file_path) > self._history_max_bytes:
-                return None
-            options = {"garbage": 0, "deflate": True}
-            if self._document_encrypted:
-                options["encryption"] = fitz.PDF_ENCRYPT_KEEP
-            snapshot = self.doc.tobytes(**options)
-            return snapshot if len(snapshot) <= self._history_max_bytes else None
-        except Exception:
-            return None
+        return self.document_history.capture_snapshot(
+            self.doc,
+            file_path=self.file_path,
+            encrypted=self._document_encrypted,
+            encryption_keep=fitz.PDF_ENCRYPT_KEEP,
+        )
 
     def _record_undo(self):
-        if not self.doc or self._undo_disabled_for_size:
+        if not self.doc or self.document_history.disabled:
             return False
         snapshot = self._snapshot_for_history()
-        if snapshot is None:
-            self._undo_stack.clear()
-            self._redo_stack.clear()
-            self._undo_disabled_for_size = True
-            self.statusBar().showMessage("Undo/redo is disabled for this PDF because its history snapshot exceeds 16 MiB or could not be created.", 7000)
-            return False
-        self._undo_stack.append(snapshot)
-        del self._undo_stack[:-5]
-        self._redo_stack.clear()
-        return True
+        recorded = self.document_history.record(snapshot)
+        if not recorded and self.document_history.disabled:
+            self.statusBar().showMessage(
+                "Undo/redo is disabled for this PDF because its history snapshot "
+                "exceeds 16 MiB or could not be created.",
+                7000,
+            )
+        return recorded
 
     def _restore_history_snapshot(self, snapshot, label):
         replacement = None
@@ -1316,37 +1322,26 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                 replacement.close()
 
     def undo_edit(self):
-        if not self.doc or not self._undo_stack:
+        if not self.doc or not self.document_history.can_undo:
             self.statusBar().showMessage("There is no edit to undo.", 3000)
             return
         current = self._snapshot_for_history()
-        if current is None:
-            self._undo_stack.clear()
-            self._redo_stack.clear()
-            self._undo_disabled_for_size = True
-            self.statusBar().showMessage("Undo/redo history is unavailable for this PDF size.", 6000)
-            return
-        previous = self._undo_stack[-1]
-        if self._restore_history_snapshot(previous, "Undo"):
-            self._undo_stack.pop()
-            self._redo_stack.append(current)
+        outcome = self.document_history.undo(current, self._restore_history_snapshot)
+        if outcome == "unavailable":
+            self.statusBar().showMessage(
+                "Undo/redo history is unavailable for this PDF size.", 6000
+            )
 
     def redo_edit(self):
-        if not self.doc or not self._redo_stack:
+        if not self.doc or not self.document_history.can_redo:
             self.statusBar().showMessage("There is no edit to redo.", 3000)
             return
         current = self._snapshot_for_history()
-        if current is None:
-            self._undo_stack.clear()
-            self._redo_stack.clear()
-            self._undo_disabled_for_size = True
-            self.statusBar().showMessage("Undo/redo history is unavailable for this PDF size.", 6000)
-            return
-        next_state = self._redo_stack[-1]
-        if self._restore_history_snapshot(next_state, "Redo"):
-            self._redo_stack.pop()
-            self._undo_stack.append(current)
-            del self._undo_stack[:-5]
+        outcome = self.document_history.redo(current, self._restore_history_snapshot)
+        if outcome == "unavailable":
+            self.statusBar().showMessage(
+                "Undo/redo history is unavailable for this PDF size.", 6000
+            )
 
     def open_page_organizer(self):
         if not self.doc:
@@ -1597,9 +1592,7 @@ QToolTip{{background:{'#243851' if dark else '#172B49'};color:#FFFFFF;border:1px
                 candidate.close()
                 return
             previous_doc = self.doc
-            self._undo_stack.clear()
-            self._redo_stack.clear()
-            self._undo_disabled_for_size = False
+            self.document_history.reset()
             self.doc = candidate
             candidate = None
             if previous_doc:
