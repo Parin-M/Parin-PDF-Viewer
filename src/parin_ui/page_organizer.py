@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 
 from parin_pdf_helpers import ensure_pdf_extension, same_path
 from parin_ui.page_operations import (
-    apply_page_edit_plan,
+    create_page_edit_candidate,
     create_page_edit_plan,
     extract_pdf_pages,
 )
@@ -131,17 +131,57 @@ class PageOrganizerDialog(QDialog):
             self.accept()
             return
 
-        self.viewer._record_undo()
+        candidate = None
+        old_document = self.viewer.doc
         old_current = self.viewer.current_page
         try:
-            apply_page_edit_plan(self.viewer.doc, plan)
+            candidate = create_page_edit_candidate(
+                old_document,
+                plan,
+                password=getattr(self.viewer, "_document_password", ""),
+            )
+
+            # Capture the undo checkpoint before the live document is swapped.
+            # A large document may exceed the bounded history budget; the
+            # isolated candidate still guarantees that failed edits cannot
+            # partially mutate the currently open PDF.
+            history_recorded = bool(self.viewer._record_undo())
+            self.viewer.doc = candidate
+            candidate = None
             self.viewer.current_page = (
                 plan.order.index(old_current)
                 if old_current in plan.order
                 else min(old_current, len(plan.order) - 1)
             )
             self.viewer._after_document_structure_change()
+            try:
+                old_document.close()
+            except Exception:
+                pass
+            if not history_recorded and hasattr(self.viewer, "statusBar"):
+                self.viewer.statusBar().showMessage(
+                    "Page changes were applied safely, but Undo is unavailable for this PDF size.",
+                    7000,
+                )
             self.accept()
         except Exception as exc:
+            if candidate is not None:
+                try:
+                    candidate.close()
+                except Exception:
+                    pass
+            # If the UI handoff itself failed, put the original document back.
+            if self.viewer.doc is not old_document:
+                failed_document = self.viewer.doc
+                self.viewer.doc = old_document
+                self.viewer.current_page = old_current
+                if failed_document is not None:
+                    try:
+                        failed_document.close()
+                    except Exception:
+                        pass
+                try:
+                    self.viewer._after_document_structure_change()
+                except Exception:
+                    pass
             QMessageBox.critical(self, "Could not update pages", str(exc))
-            self.viewer.undo_edit()

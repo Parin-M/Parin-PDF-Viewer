@@ -1,5 +1,16 @@
 # Changelog
 
+## 10.1.0 — Precision Workspace and transactional document editing
+
+- Add a user-controlled Inspector panel with responsive visibility that preserves user preferences when the window is resized.
+- Fix Navigation and Inspector panels failing to reappear after crossing responsive breakpoints.
+- Bound PDF print raster dimensions and pixel allocations to avoid unbounded image memory on oversized pages.
+- Apply Page Organizer edits to an isolated, validated PDF candidate before swapping it into the active Reader document.
+- Preserve encrypted document state when creating page-edit candidates and keep the original document untouched when candidate editing fails.
+- Clean up duplicate search labels in the English and localized Reader UI.
+- Add regression coverage for responsive panel restoration, bounded print scaling and isolated page edits.
+- Align application, README, dependency metadata and Debian/CI artifact versions at 10.1.0.
+
 ## 10.0.0 — Hybrid Pro workspace and modular PDF services
 
 - Promote the application identity and Debian package to version 10.0.0.

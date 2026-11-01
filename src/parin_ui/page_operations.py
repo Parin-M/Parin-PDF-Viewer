@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 import pymupdf as fitz
 
 from .document_save_service import save_pdf_document
+from .document_service import is_document_encrypted
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,45 @@ def apply_page_edit_plan(document, plan: PageEditPlan) -> None:
         document.select(list(validated.order))
 
 
+def create_page_edit_candidate(
+    document,
+    plan: PageEditPlan,
+    *,
+    password: str = "",
+):
+    """Apply a validated page edit to an isolated copy, leaving the source untouched.
+
+    This gives Page Organizer transactional failure semantics even when bounded
+    undo history is unavailable for a large PDF.
+    """
+    page_count = _require_open_document(document, "source")
+    if not isinstance(plan, PageEditPlan) or plan.page_count != page_count:
+        raise ValueError("The page edit plan does not match the current document.")
+    validated = create_page_edit_plan(page_count, plan.order, dict(plan.rotations))
+
+    options = {"garbage": 0, "deflate": True}
+    if is_document_encrypted(document):
+        options["encryption"] = fitz.PDF_ENCRYPT_KEEP
+
+    candidate = None
+    try:
+        serialized = bytes(document.tobytes(**options))
+        candidate = fitz.open(stream=serialized, filetype="pdf")
+        if getattr(candidate, "needs_pass", False):
+            if not candidate.authenticate(str(password or "")):
+                raise RuntimeError("The copied PDF could not be authenticated.")
+        apply_page_edit_plan(candidate, validated)
+        if candidate.page_count != len(validated.order) or candidate.page_count < 1:
+            raise RuntimeError("The edited PDF has an unexpected page count.")
+        candidate.load_page(0)
+        result = candidate
+        candidate = None
+        return result
+    finally:
+        if candidate is not None:
+            candidate.close()
+
+
 def insert_pdf_pages(target_document, source_document, *, start_at: int) -> int:
     """Insert all readable source pages at the requested target position."""
     target_count = _require_open_document(target_document, "destination")
@@ -167,6 +207,7 @@ __all__ = [
     "ExtractedPDF",
     "create_page_edit_plan",
     "apply_page_edit_plan",
+    "create_page_edit_candidate",
     "insert_pdf_pages",
     "extract_pdf_pages",
 ]

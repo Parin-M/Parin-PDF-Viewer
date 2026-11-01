@@ -748,7 +748,8 @@ class PageOrganizerDialogTests(unittest.TestCase):
             moved = dialog.pages.takeItem(1)
             dialog.pages.insertItem(0, moved)
             dialog.apply_changes()
-            self.assertIn("Page two", document.load_page(0).get_text())
+            self.assertIn("Page two", viewer.doc.load_page(0).get_text())
+            self.assertTrue(document.is_closed, "the old PDF handle is released after a successful swap")
             self.assertEqual(viewer.current_page, 0)
             self.assertEqual(viewer.undo_records, 1)
             self.assertEqual(viewer.structure_updates, 1)
@@ -773,7 +774,8 @@ class PageOrganizerDialogTests(unittest.TestCase):
             with patch("parin_ui.page_organizer.QMessageBox.critical") as critical:
                 dialog.apply_changes()
             critical.assert_not_called()
-            self.assertEqual(document.load_page(0).rotation, 90)
+            self.assertEqual(viewer.doc.load_page(0).rotation, 90)
+            self.assertTrue(document.is_closed, "rotation is applied to the isolated candidate")
             self.assertEqual(viewer.undo_records, 1)
         finally:
             dialog.close()
@@ -1206,6 +1208,53 @@ class DocumentHistoryTests(unittest.TestCase):
 
 
 
+
+
+
+class ResponsiveWorkspacePanelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_panels_restore_after_resize_and_preserve_user_preferences(self):
+        from parin_ui.workspace_shell import ParinWorkspaceShell
+
+        shell = ParinWorkspaceShell(density="high")
+        try:
+            shell.resize(700, 620)
+            shell.show()
+            self.app.processEvents()
+            self.assertFalse(shell.navigation_panel.isVisible())
+            self.assertFalse(shell.inspector_panel.isVisible())
+
+            shell.resize(1320, 820)
+            self.app.processEvents()
+            self.assertTrue(shell.navigation_panel.isVisible())
+            self.assertTrue(shell.inspector_panel.isVisible())
+
+            shell.set_navigation_visible(False)
+            shell.resize(700, 620)
+            shell.resize(1320, 820)
+            self.app.processEvents()
+            self.assertFalse(shell.navigation_panel.isVisible())
+            shell.set_navigation_visible(True)
+            self.app.processEvents()
+            self.assertTrue(shell.navigation_panel.isVisible())
+
+            shell.inspector_button.setChecked(False)
+            self.app.processEvents()
+            self.assertFalse(shell.inspector_panel.isVisible())
+            shell.resize(700, 620)
+            shell.resize(1320, 820)
+            self.app.processEvents()
+            self.assertFalse(shell.inspector_panel.isVisible())
+            shell.inspector_button.setChecked(True)
+            self.app.processEvents()
+            self.assertTrue(shell.inspector_panel.isVisible())
+        finally:
+            shell.close()
+            self.app.processEvents()
 
 if __name__ == "__main__":
     unittest.main()
