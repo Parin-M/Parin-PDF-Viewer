@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+# Keep Debian metadata and output filenames aligned with the application.
+VERSION="$(PYTHONPATH="$ROOT/src" python -c 'from parin_pdf_helpers import APP_VERSION; print(APP_VERSION)')"
 
 if [[ ! -d ".venv" ]]; then
   echo "ERROR: .venv not found."
@@ -14,7 +16,6 @@ source .venv/bin/activate
 
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-
 rm -rf build dist dist-deb package
 mkdir -p dist-deb package/usr/lib/parin-pdf package/usr/bin \
          package/usr/share/applications \
@@ -31,12 +32,12 @@ install -m 0644 assets/parin-pdf.svg package/usr/share/icons/hicolor/scalable/ap
 mkdir -p package/DEBIAN
 cat > package/DEBIAN/control <<EOF
 Package: parin-pdf
-Version: 8.8.0
+Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: Parin
-Depends: libc6
+Depends: libc6, libstdc++6, libgcc-s1, libgl1, libegl1, libpulse0, libxkbcommon0, libxkbcommon-x11-0, libxcb-cursor0, libxcb-icccm4, libxcb-keysyms1, libxcb-shape0, libxcb-xinerama0, libxcb-randr0, libxcb-render-util0, libxcb-xfixes0, libxcb-xkb1, libdbus-1-3, libfontconfig1, libx11-xcb1
 Description: Parin - Modern PDF workspace
  Modern desktop PDF viewer built with PySide6 and PyMuPDF.
 EOF
@@ -50,8 +51,8 @@ exit 0
 EOF
 chmod 0755 package/DEBIAN/postinst
 
-dpkg-deb --build package "dist-deb/parin-pdf_8.8.0_amd64.deb"
+dpkg-deb --root-owner-group --build package "dist-deb/parin-pdf_${VERSION}_amd64.deb"
 
 echo
 echo "SUCCESS:"
-echo "  $ROOT/dist-deb/parin-pdf_8.8.0_amd64.deb"
+echo "  $ROOT/dist-deb/parin-pdf_${VERSION}_amd64.deb"
