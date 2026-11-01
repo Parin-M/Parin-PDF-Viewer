@@ -6,7 +6,7 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
-APP_VERSION = "10.0.0"
+APP_VERSION = "10.1.0"
 RECENT_FILES_LIMIT = 10
 
 def normalize_recent_files(paths: object, limit: int = RECENT_FILES_LIMIT) -> list[str]:

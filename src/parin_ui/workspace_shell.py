@@ -37,6 +37,7 @@ SHELL_LABELS = {
         "command": "Search commands    Ctrl+K",
         "fit_width": "Fit Width",
         "fit_page": "Fit Page",
+        "inspector": "Inspector",
         "exit_focus": "Exit Focus",
         "workspace_titles": {
             "reader": "Reader Studio",
@@ -52,6 +53,7 @@ SHELL_LABELS = {
         "command": "جست‌وجوی فرمان‌ها    Ctrl+K",
         "fit_width": "تناسب با عرض",
         "fit_page": "تناسب با صفحه",
+        "inspector": "بازرس",
         "exit_focus": "خروج از تمرکز",
         "workspace_titles": {
             "reader": "محیط مطالعه",
@@ -67,6 +69,7 @@ SHELL_LABELS = {
         "command": "Befehle suchen    Ctrl+K",
         "fit_width": "Breite anpassen",
         "fit_page": "Seite einpassen",
+        "inspector": "Inspektor",
         "exit_focus": "Fokus beenden",
         "workspace_titles": {
             "reader": "Reader Studio",
@@ -111,6 +114,8 @@ class ParinWorkspaceShell(QWidget):
         self._active_workspace = "reader"
         self._language = "en"
         self._focus_mode = False
+        self._navigation_user_visible = True
+        self._inspector_user_visible = True
         self._workspace_widget: QWidget | None = None
         self._navigation_buttons: dict[str, QToolButton] = {}
         self.command_registry = CommandRegistry()
@@ -174,7 +179,7 @@ class ParinWorkspaceShell(QWidget):
         brand_text.addWidget(subtitle)
         row.addLayout(brand_text)
 
-        version = QLabel("V10  ·  HYBRID PRO", header)
+        version = QLabel("V10.1  ·  PRECISION", header)
         version.setObjectName("version_chip")
         row.addWidget(version)
         row.addStretch(1)
@@ -253,6 +258,14 @@ class ParinWorkspaceShell(QWidget):
         self.fit_page_button = self._tool_button("Fit Page", "context_action")
         self.fit_page_button.clicked.connect(self.fitPageRequested)
         row.addWidget(self.fit_page_button)
+
+        self.inspector_button = self._tool_button("Inspector", "context_action")
+        self.inspector_button.setCheckable(True)
+        self.inspector_button.setChecked(True)
+        self.inspector_button.setToolTip("Show or hide the document inspector")
+        self.inspector_button.toggled.connect(self.set_inspector_visible)
+        row.addWidget(self.inspector_button)
+
         self.focus_exit_button = self._tool_button("Exit Focus", "context_action")
         self.focus_exit_button.clicked.connect(self.focusExitRequested)
         self.focus_exit_button.setVisible(False)
@@ -428,6 +441,7 @@ class ParinWorkspaceShell(QWidget):
         self.command_button.setText(labels["command"])
         self.fit_width_button.setText(labels["fit_width"])
         self.fit_page_button.setText(labels["fit_page"])
+        self.inspector_button.setText(labels["inspector"])
         self.focus_exit_button.setText(labels["exit_focus"])
         for workspace_id, _title in WORKSPACES:
             self._navigation_buttons[workspace_id].setText(
@@ -487,24 +501,51 @@ class ParinWorkspaceShell(QWidget):
         """Allow a QMainWindow status bar to remain the single status surface."""
         self.status_strip.setVisible(bool(visible))
 
+    @property
+    def navigation_requested_visible(self) -> bool:
+        """User preference, independent of automatic responsive hiding."""
+        return self._navigation_user_visible
+
+    @property
+    def inspector_requested_visible(self) -> bool:
+        """User preference, independent of automatic responsive hiding."""
+        return self._inspector_user_visible
+
     def set_navigation_visible(self, visible: bool) -> None:
-        if self._focus_mode:
+        self._navigation_user_visible = bool(visible)
+        self._update_responsive_panels()
+
+    def set_inspector_visible(self, visible: bool) -> None:
+        self._inspector_user_visible = bool(visible)
+        if hasattr(self, "inspector_button"):
+            self.inspector_button.blockSignals(True)
+            self.inspector_button.setChecked(self._inspector_user_visible)
+            self.inspector_button.blockSignals(False)
+        self._update_responsive_panels()
+
+    def _update_responsive_panels(self) -> None:
+        """Apply user preferences and viewport breakpoints without losing either."""
+        if not hasattr(self, "navigation_panel") or not hasattr(self, "inspector_panel"):
             return
-        self.navigation_panel.setVisible(bool(visible))
+        if self._focus_mode:
+            self.navigation_panel.setVisible(False)
+            self.inspector_panel.setVisible(False)
+            return
+
+        width = self.width()
+        self.navigation_panel.setVisible(
+            self._navigation_user_visible and width >= self.metrics.narrow_breakpoint
+        )
+        self.inspector_panel.setVisible(
+            self._inspector_user_visible and width >= self.metrics.compact_breakpoint
+        )
 
     def set_focus_mode(self, enabled: bool) -> None:
         """Toggle a distraction-reduced reader view without replacing the PDF."""
         self._focus_mode = bool(enabled)
         self.toolbar_frame.setVisible(not self._focus_mode)
         self.focus_exit_button.setVisible(self._focus_mode)
-        if self._focus_mode:
-            self.navigation_panel.hide()
-            self.inspector_panel.hide()
-            return
-
-        width = self.width()
-        self.navigation_panel.setVisible(width >= self.metrics.narrow_breakpoint)
-        self.inspector_panel.setVisible(width >= self.metrics.compact_breakpoint)
+        self._update_responsive_panels()
 
     def set_document_status(self, text: str, page_text: str = "Page 0 of 0") -> None:
         self.document_status.setText(text)
@@ -525,13 +566,4 @@ class ParinWorkspaceShell(QWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         width = event.size().width()
-        if self._focus_mode:
-            self.toolbar_frame.setVisible(False)
-            self.navigation_panel.setVisible(False)
-            self.inspector_panel.setVisible(False)
-            return
-        self.inspector_panel.setVisible(width >= self.metrics.compact_breakpoint)
-        if width < self.metrics.narrow_breakpoint:
-            self.navigation_panel.setVisible(False)
-        elif not self.navigation_panel.isHidden():
-            self.navigation_panel.setVisible(True)
+        self._update_responsive_panels()

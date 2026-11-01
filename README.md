@@ -5,12 +5,12 @@ A PDF viewer that you can install on Debian and Debian Base OS
 
 Website: https://parin-m.github.io/parin-pdf-viewer-site/
 
-Edition V10.0 — Application version 10.0.0:
+Edition V10.1 — Application version 10.1.0:
 
-The current Hybrid Pro edition introduces the five-zone workspace shell and
-Reader, Focus, Research, Compare and Document Hub workspaces. It also brings
-modular PDF services for document opening, saving, page operations,
-annotations and text search, with regression coverage in CI.
+The Precision Workspace update refines responsive panels, adds a user-controlled
+document Inspector, bounds print raster memory, and makes Page Organizer edits
+transactional through validated document candidates. The Hybrid Pro Reader,
+Focus, Research, Compare and Document Hub workspaces remain the foundation.
 
 
 -----------------------------------------------------------------------------------------------------------------------------------------------------

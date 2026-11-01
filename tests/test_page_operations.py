@@ -6,6 +6,7 @@ import pymupdf as fitz
 
 from parin_ui.page_operations import (
     apply_page_edit_plan,
+    create_page_edit_candidate,
     create_page_edit_plan,
     extract_pdf_pages,
     insert_pdf_pages,
@@ -66,6 +67,51 @@ class PageOperationsTests(unittest.TestCase):
             self.assertIn("One", document.load_page(0).get_text())
         finally:
             document.close()
+
+    def test_page_edit_candidate_isolated_from_live_document(self):
+        document = self._make_document(["First", "Second", "Third"])
+        candidate = None
+        try:
+            plan = create_page_edit_plan(3, [2, 0])
+            candidate = create_page_edit_candidate(document, plan)
+            self.assertEqual(document.page_count, 3)
+            self.assertIn("First", document.load_page(0).get_text())
+            self.assertEqual(candidate.page_count, 2)
+            self.assertIn("Third", candidate.load_page(0).get_text())
+            self.assertIn("First", candidate.load_page(1).get_text())
+        finally:
+            if candidate is not None:
+                candidate.close()
+            document.close()
+
+    def test_encrypted_page_edit_candidate_preserves_encryption(self):
+        document = fitz.open()
+        document.new_page()
+        with tempfile.TemporaryDirectory() as folder:
+            source_path = Path(folder) / "encrypted-source.pdf"
+            document.save(
+                str(source_path),
+                encryption=fitz.PDF_ENCRYPT_AES_256,
+                owner_pw="owner-secret",
+                user_pw="",
+            )
+            document.close()
+            source = fitz.open(str(source_path))
+            if getattr(source, "needs_pass", False):
+                self.assertGreater(source.authenticate(""), 0)
+            candidate = None
+            try:
+                plan = create_page_edit_plan(source.page_count, [0])
+                candidate = create_page_edit_candidate(source, plan, password="")
+                encryption = (candidate.metadata or {}).get("encryption")
+                self.assertTrue(
+                    encryption and str(encryption).strip().lower() not in ("none", "null")
+                )
+                self.assertGreater(candidate.authenticate(""), 0)
+            finally:
+                if candidate is not None:
+                    candidate.close()
+                source.close()
 
     def test_inserts_source_pdf_at_the_requested_position(self):
         target = self._make_document(["Target one", "Target two"])
