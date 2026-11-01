@@ -441,7 +441,8 @@ class ResearchStudioTests(unittest.TestCase):
             document.new_page()
             document.new_page()
             document.save(str(path))
-            document.close()
+            if not document.is_closed:
+                document.close()
             document = fitz.open(str(path))
             store = ResearchStore(Path(folder) / "research-data")
             studio = ResearchStudio(store)
@@ -466,6 +467,7 @@ class ResearchStudioTests(unittest.TestCase):
                 restarted.close()
             finally:
                 studio.close()
+                if not document.is_closed:
                 document.close()
 
     def test_highlight_extractor_finds_pdf_highlight_annotations(self):
@@ -757,7 +759,8 @@ class PageOrganizerDialogTests(unittest.TestCase):
         finally:
             dialog.close()
             viewer.close()
-            document.close()
+            if not document.is_closed:
+                document.close()
 
     def test_rotation_is_staged_until_apply(self):
         from unittest.mock import patch
@@ -780,7 +783,8 @@ class PageOrganizerDialogTests(unittest.TestCase):
         finally:
             dialog.close()
             viewer.close()
-            document.close()
+            if not document.is_closed:
+                document.close()
 
     def test_empty_page_list_is_rejected_without_mutating_document(self):
         from unittest.mock import patch
@@ -803,7 +807,8 @@ class PageOrganizerDialogTests(unittest.TestCase):
         finally:
             dialog.close()
             viewer.close()
-            document.close()
+            if not document.is_closed:
+                document.close()
 
     def test_main_module_keeps_page_organizer_import_compatible(self):
         from parin_pdf_viewer import PageOrganizerDialog as MainPageOrganizerDialog
@@ -1025,7 +1030,8 @@ class NavigationPanelControllerTests(unittest.TestCase):
             self.assertEqual(chapter.childCount(), 1)
         finally:
             viewer.close()
-            document.close()
+            if not document.is_closed:
+                document.close()
 
     def test_page_and_outline_selection_route_to_reader_navigation(self):
         from parin_ui.navigation_i18n import NAVIGATION_I18N
@@ -1046,7 +1052,8 @@ class NavigationPanelControllerTests(unittest.TestCase):
             self.assertEqual(viewer.visited_pages[-1], 2)
         finally:
             viewer.close()
-            document.close()
+            if not document.is_closed:
+                document.close()
 
     def test_translation_and_current_page_sync_are_owned_by_controller(self):
         from parin_ui.navigation_i18n import NAVIGATION_I18N
@@ -1071,7 +1078,8 @@ class NavigationPanelControllerTests(unittest.TestCase):
             self.assertEqual(controller.page_list.currentRow(), 1)
         finally:
             viewer.close()
-            document.close()
+            if not document.is_closed:
+                document.close()
 
     def test_visible_page_thumbnails_are_cached_with_a_bounded_lru(self):
         from parin_ui.navigation_i18n import NAVIGATION_I18N
@@ -1089,7 +1097,8 @@ class NavigationPanelControllerTests(unittest.TestCase):
             self.assertLessEqual(len(controller.thumbnail_cache), 40)
         finally:
             viewer.close()
-            document.close()
+            if not document.is_closed:
+                document.close()
 
 
 

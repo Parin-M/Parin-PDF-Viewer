@@ -74,7 +74,7 @@ class ZoomTests(unittest.TestCase):
 
 class VersionTests(unittest.TestCase):
     def test_application_version_is_1000(self):
-        self.assertEqual(APP_VERSION, "10.0.0")
+        self.assertEqual(APP_VERSION, "10.1.0")
 
     def test_debian_build_reads_the_application_version(self):
         root = Path(__file__).resolve().parents[1]
