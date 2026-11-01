@@ -468,7 +468,7 @@ class ResearchStudioTests(unittest.TestCase):
             finally:
                 studio.close()
                 if not document.is_closed:
-                document.close()
+                    document.close()
 
     def test_highlight_extractor_finds_pdf_highlight_annotations(self):
         import pymupdf as fitz
