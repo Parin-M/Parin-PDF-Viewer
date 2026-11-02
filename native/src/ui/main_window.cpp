@@ -186,7 +186,7 @@ void MainWindow::buildUi() {
 }
 void MainWindow::refreshAppearance() {
     const int hue = (themeIndex_ * 137) % 360;
-    const QColor accent = QColor::fromHsv(hue, 155 + (themeIndex_%4)*20, 205);
+    const QColor accent = QColor::fromHsv(hue, 155 + ((themeIndex_/360)%2)*35 + (themeIndex_%4)*20, 205);
     const QColor accentDark = accent.darker(145);
     const QString a = accent.name();
     const QString ad = accentDark.name();
@@ -263,6 +263,8 @@ void MainWindow::showSettings() {
     connect(theme,qOverload<int>(&QComboBox::currentIndexChanged),this,&MainWindow::applyTheme);
     if(dialog.exec()==QDialog::Accepted) {
         language_=language->currentText();
+        const bool rtl = language_ == QStringLiteral("فارسی") || language_ == QStringLiteral("العربية") || language_ == QStringLiteral("اردو");
+        setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight);
         QSettings settings(QStringLiteral("Parin"),QStringLiteral("Parin"));
         settings.setValue(QStringLiteral("general/language"),language_);
         settings.setValue(QStringLiteral("appearance/motionProfile"),animations->currentText());
