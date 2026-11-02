@@ -1,0 +1,58 @@
+name: Parin Native CI
+
+on:
+  push:
+    branches: [feature/v10.2-native-mupdf]
+  pull_request:
+    branches: [feature/v10.1-precision-workspace]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parin-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build pkg-config qt6-base-dev libmupdf-dev dpkg-dev rustc cargo
+
+      - name: Verify native dependencies
+        run: |
+          cmake --version
+          pkg-config --modversion mupdf
+          rustc --version
+          cargo --version
+
+      - name: Test Rust core
+        run: cargo test --manifest-path native/rust/parin_core/Cargo.toml
+
+      - name: Configure CMake
+        run: cmake -S . -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+
+      - name: Compile native application and tests
+        run: cmake --build build/native --parallel
+
+      - name: Run native tests
+        run: ctest --test-dir build/native --output-on-failure
+
+      - name: Build Debian package
+        run: bash native/scripts/build-deb.sh
+
+      - name: Upload native Debian package
+        uses: actions/upload-artifact@v7
+        with:
+          name: parin-pdf-10.2.0-native-deb
+          path: dist-native/parin-pdf_10.2.0_amd64.deb
+          if-no-files-found: error
+          retention-days: 14
