@@ -43,5 +43,21 @@ Description: Parin native PDF workspace
  Native C++/Qt PDF reader using the MuPDF C API and a Rust render cache.
 EOF
 
-dpkg-deb --root-owner-group --build "$STAGE" "$PACKAGE_DIR/parin-pdf_${VERSION}_${ARCH}.deb"
-echo "Built: $PACKAGE_DIR/parin-pdf_${VERSION}_${ARCH}.deb"
+DEB_PATH="$PACKAGE_DIR/parin-pdf_${VERSION}_${ARCH}.deb"
+dpkg-deb --root-owner-group --build "$STAGE" "$DEB_PATH"
+
+# Validate the package metadata and runtime dependency closure before upload.
+dpkg-deb --info "$DEB_PATH"
+DEPENDENCY_FIELD="$(dpkg-deb --field "$DEB_PATH" Depends)"
+if [[ -z "$DEPENDENCY_FIELD" ]]; then
+  echo "The Debian package has no runtime dependency field." >&2
+  exit 1
+fi
+MISSING_LIBRARIES="$(ldd "$STAGE/usr/bin/parin-native" | grep 'not found' || true)"
+if [[ -n "$MISSING_LIBRARIES" ]]; then
+  echo "The native executable has unresolved runtime libraries:" >&2
+  echo "$MISSING_LIBRARIES" >&2
+  exit 1
+fi
+
+echo "Built and validated: $DEB_PATH"

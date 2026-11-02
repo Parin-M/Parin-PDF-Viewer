@@ -57,6 +57,7 @@ parin_mupdf_document *parin_mupdf_open(
         return NULL;
     }
 
+    fz_var(handle);
     fz_var(opened);
     fz_try(handle->context) {
         fz_register_document_handlers(handle->context);
@@ -235,6 +236,7 @@ int parin_mupdf_search_page(
         return -1;
     }
 
+    fz_var(hits);
     fz_try(document->context) {
         hits = fz_search_page_number(document->context, document->document, page_index,
             utf8_query, marks, boxes, 128);
