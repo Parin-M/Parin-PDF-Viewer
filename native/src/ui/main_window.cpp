@@ -17,6 +17,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QStatusBar>
 #include <QSplitter>
 #include <QStyle>
 #include <QToolBar>
