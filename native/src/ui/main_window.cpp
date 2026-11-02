@@ -1,150 +1,329 @@
 #include "ui/main_window.h"
 
 #include <QAction>
+#include <QAbstractAnimation>
+#include <QCoreApplication>
+#include <QIcon>
+#include <QUrl>
 #include <QApplication>
+#include <QAudioOutput>
 #include <QBuffer>
+#include <QComboBox>
 #include <QDataStream>
-#include <QKeySequence>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QFrame>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMediaPlayer>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPixmap>
+#include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSettings>
+#include <QSlider>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QSplitter>
 #include <QStyle>
+#include <QTabWidget>
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <QWidget>
-
+#include <QPropertyAnimation>
+#include <QGraphicsOpacityEffect>
 #include <algorithm>
 #include <cmath>
 
 namespace parin {
-
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
-{
+MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
+    QSettings settings(QStringLiteral("Parin"), QStringLiteral("Parin"));
+    themeIndex_ = settings.value(QStringLiteral("appearance/themeIndex"), 17).toInt();
+    language_ = settings.value(QStringLiteral("general/language"), QStringLiteral("English")).toString();
     buildUi();
+    refreshAppearance();
     updateDocumentState();
-    resize(1440, 900);
+    resize(1540, 960);
 }
+void MainWindow::buildUi() {
+    setWindowTitle(QStringLiteral("Parin 10.2.01 — Persian Grand Edition"));
+    setMinimumSize(1040, 680);
+    auto *root = new QWidget(this);
+    auto *rootLayout = new QVBoxLayout(root);
+    rootLayout->setContentsMargins(0,0,0,0);
+    rootLayout->setSpacing(0);
 
-void MainWindow::buildUi()
-{
-    setWindowTitle(QStringLiteral("Parin 10.2 — Native PDF Workspace"));
-    setMinimumSize(900, 600);
-    setStyleSheet(QStringLiteral(
-        "QMainWindow { background: #edf2f8; }"
-        "QToolBar { background: #142943; color: white; border: 0; spacing: 6px; padding: 8px; }"
-        "QToolBar QToolButton { color: white; padding: 7px 10px; border-radius: 6px; }"
-        "QToolBar QToolButton:hover { background: #2c4563; }"
-        "QLineEdit { background: #ffffff; color: #1c2b3e; border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px; min-width: 190px; }"
-        "QFrame#inspector { background: #f8fafc; border-left: 1px solid #d7e0ea; }"
-        "QLabel#muted { color: #63758b; }"
-        "QStatusBar { background: #f8fafc; color: #52657b; }"
-    ));
+    auto *top = new QFrame(root);
+    top->setObjectName(QStringLiteral("topBar"));
+    auto *topLayout = new QHBoxLayout(top);
+    topLayout->setContentsMargins(18,10,18,10);
+    topLayout->setSpacing(14);
+    brandMark_ = new QLabel(QStringLiteral("✦  PARIN"), top);
+    brandMark_->setObjectName(QStringLiteral("brandMark"));
+    brandMark_->setStyleSheet(QStringLiteral("font-size:20px;font-weight:900;letter-spacing:2px;"));
+    topLayout->addWidget(brandMark_);
+    auto *edition = new QLabel(QStringLiteral("P E R S I A N   G R A N D   E D I T I O N   •   10.2.01"), top);
+    edition->setObjectName(QStringLiteral("editionLabel"));
+    topLayout->addWidget(edition);
+    topLayout->addStretch();
+    auto *settingsButton = new QPushButton(QIcon(QCoreApplication::applicationDirPath() + QStringLiteral("/../share/icons/parin/settings.svg")), QStringLiteral("Settings"), top);
+    settingsButton->setObjectName(QStringLiteral("accentButton"));
+    connect(settingsButton, &QPushButton::clicked, this, &MainWindow::showSettings);
+    topLayout->addWidget(settingsButton);
+    auto *aboutButton = new QPushButton(QStringLiteral("About"), top);
+    connect(aboutButton, &QPushButton::clicked, this, &MainWindow::showAbout);
+    topLayout->addWidget(aboutButton);
+    rootLayout->addWidget(top);
 
-    auto *toolbar = addToolBar(QStringLiteral("Reader"));
+    auto *toolbar = addToolBar(QStringLiteral("Grand Reader"));
+    toolbar->setObjectName(QStringLiteral("mainToolbar"));
     toolbar->setMovable(false);
-
-    auto *openAction = toolbar->addAction(
-        style()->standardIcon(QStyle::SP_DialogOpenButton), QStringLiteral("Open PDF"));
+    toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    auto *openAction = toolbar->addAction(QIcon(QCoreApplication::applicationDirPath() + QStringLiteral("/../share/icons/parin/open.svg")), QStringLiteral("Open PDF"));
     openAction->setShortcut(QKeySequence::Open);
     connect(openAction, &QAction::triggered, this, &MainWindow::openDocument);
-
     toolbar->addSeparator();
-    previousAction_ = toolbar->addAction(QStringLiteral("Previous"));
+    previousAction_ = toolbar->addAction(QStringLiteral("◀  Previous"));
     previousAction_->setShortcut(QKeySequence(Qt::Key_Left));
     connect(previousAction_, &QAction::triggered, this, &MainWindow::previousPage);
-
-    nextAction_ = toolbar->addAction(QStringLiteral("Next"));
+    nextAction_ = toolbar->addAction(QStringLiteral("Next  ▶"));
     nextAction_->setShortcut(QKeySequence(Qt::Key_Right));
     connect(nextAction_, &QAction::triggered, this, &MainWindow::nextPage);
-
     toolbar->addSeparator();
     zoomOutAction_ = toolbar->addAction(QStringLiteral("−"));
-    zoomOutAction_->setToolTip(QStringLiteral("Zoom out"));
     connect(zoomOutAction_, &QAction::triggered, this, &MainWindow::zoomOut);
-
     zoomInAction_ = toolbar->addAction(QStringLiteral("+"));
-    zoomInAction_->setToolTip(QStringLiteral("Zoom in"));
     connect(zoomInAction_, &QAction::triggered, this, &MainWindow::zoomIn);
-
     fitWidthAction_ = toolbar->addAction(QStringLiteral("Fit Width"));
     connect(fitWidthAction_, &QAction::triggered, this, &MainWindow::fitWidth);
-
     fitPageAction_ = toolbar->addAction(QStringLiteral("Fit Page"));
     connect(fitPageAction_, &QAction::triggered, this, &MainWindow::fitPage);
-
     toolbar->addSeparator();
     searchEdit_ = new QLineEdit(this);
-    searchEdit_->setPlaceholderText(QStringLiteral("Search in document…"));
+    searchEdit_->setPlaceholderText(QStringLiteral("⌕  Search inside your document…"));
     searchEdit_->setClearButtonEnabled(true);
+    searchEdit_->setMinimumWidth(260);
     toolbar->addWidget(searchEdit_);
     connect(searchEdit_, &QLineEdit::returnPressed, this, &MainWindow::findText);
+    toolbar->addSeparator();
+    musicPanelAction_ = toolbar->addAction(QIcon(QCoreApplication::applicationDirPath() + QStringLiteral("/../share/icons/parin/music.svg")), QStringLiteral("Lo-fi Studio"));
+    connect(musicPanelAction_, &QAction::triggered, this, &MainWindow::showMusicPanel);
 
-    auto *splitter = new QSplitter(Qt::Horizontal, this);
+    auto *splitter = new QSplitter(Qt::Horizontal, root);
     splitter->setChildrenCollapsible(false);
-
     scrollArea_ = new QScrollArea(splitter);
     scrollArea_->setObjectName(QStringLiteral("pdfScrollArea"));
     scrollArea_->setWidgetResizable(false);
     scrollArea_->setAlignment(Qt::AlignHCenter | Qt::AlignTop);
     scrollArea_->setFrameShape(QFrame::NoFrame);
-    scrollArea_->setBackgroundRole(QPalette::AlternateBase);
-
+    scrollArea_->setBackgroundRole(QPalette::Dark);
     pageCanvas_ = new QLabel(scrollArea_);
     pageCanvas_->setAlignment(Qt::AlignCenter);
-    pageCanvas_->setMinimumSize(1, 1);
-    pageCanvas_->setStyleSheet(QStringLiteral("background: white;"));
+    pageCanvas_->setMinimumSize(1,1);
+    pageCanvas_->setStyleSheet(QStringLiteral("background:white;"));
     scrollArea_->setWidget(pageCanvas_);
     splitter->addWidget(scrollArea_);
 
     auto *inspector = new QFrame(splitter);
     inspector->setObjectName(QStringLiteral("inspector"));
-    inspector->setMinimumWidth(230);
-    inspector->setMaximumWidth(340);
+    inspector->setMinimumWidth(250);
+    inspector->setMaximumWidth(380);
     auto *inspectorLayout = new QVBoxLayout(inspector);
-    inspectorLayout->setContentsMargins(18, 18, 18, 18);
-    inspectorLayout->setSpacing(12);
-
-    auto *inspectorHeading = new QLabel(QStringLiteral("DOCUMENT INSPECTOR"), inspector);
-    inspectorHeading->setObjectName(QStringLiteral("muted"));
-    inspectorHeading->setStyleSheet(QStringLiteral("font-size: 10pt; font-weight: 700;"));
-    inspectorLayout->addWidget(inspectorHeading);
-
-    documentInfo_ = new QLabel(QStringLiteral("No document open"), inspector);
+    inspectorLayout->setContentsMargins(20,22,20,20);
+    inspectorLayout->setSpacing(14);
+    auto *eyebrow = new QLabel(QStringLiteral("✧  DOCUMENT ATELIER"), inspector);
+    eyebrow->setObjectName(QStringLiteral("eyebrow"));
+    inspectorLayout->addWidget(eyebrow);
+    auto *inspectorTitle = new QLabel(QStringLiteral("Document Inspector"), inspector);
+    inspectorTitle->setObjectName(QStringLiteral("panelTitle"));
+    inspectorLayout->addWidget(inspectorTitle);
+    documentInfo_ = new QLabel(QStringLiteral("Open a PDF to explore its details."), inspector);
     documentInfo_->setWordWrap(true);
     documentInfo_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    documentInfo_->setObjectName(QStringLiteral("documentInfo"));
     inspectorLayout->addWidget(documentInfo_);
+    auto *quickGroup = new QGroupBox(QStringLiteral("QUICK TOOLS"), inspector);
+    auto *quickLayout = new QVBoxLayout(quickGroup);
+    const QStringList quicks{QStringLiteral("Page navigation"),QStringLiteral("Reading appearance"),QStringLiteral("Lo-fi listening room"),QStringLiteral("Application preferences")};
+    for (const auto &label : quicks) {
+        const QString iconName = label.contains(QStringLiteral("Lo-fi")) ? QStringLiteral("music.svg") : (label.contains(QStringLiteral("appearance")) ? QStringLiteral("theme.svg") : (label.contains(QStringLiteral("preferences")) ? QStringLiteral("settings.svg") : QStringLiteral("pages.svg")));
+        auto *b = new QPushButton(QIcon(QCoreApplication::applicationDirPath() + QStringLiteral("/../share/icons/parin/") + iconName), label, quickGroup);
+        b->setObjectName(QStringLiteral("quickButton"));
+        quickLayout->addWidget(b);
+        if (label.contains(QStringLiteral("Lo-fi"))) connect(b,&QPushButton::clicked,this,&MainWindow::showMusicPanel);
+        else if (label.contains(QStringLiteral("preferences"))) connect(b,&QPushButton::clicked,this,&MainWindow::showSettings);
+        else if (label.contains(QStringLiteral("appearance"))) connect(b,&QPushButton::clicked,this,&MainWindow::showSettings);
+        else connect(b,&QPushButton::clicked,this,[this]{ if(document_.isOpen()) fitPage(); });
+    }
+    inspectorLayout->addWidget(quickGroup);
     inspectorLayout->addStretch(1);
-
-    auto *engineLabel = new QLabel(QStringLiteral("Native engine: MuPDF C API"), inspector);
-    engineLabel->setObjectName(QStringLiteral("muted"));
-    engineLabel->setWordWrap(true);
-    inspectorLayout->addWidget(engineLabel);
-    auto *cacheLabel = new QLabel(QStringLiteral("Render cache: Rust"), inspector);
-    cacheLabel->setObjectName(QStringLiteral("muted"));
-    inspectorLayout->addWidget(cacheLabel);
+    auto *engine = new QLabel(QStringLiteral("NATIVE ENGINE  ·  MuPDF C API\nRENDER CACHE  ·  Rust"), inspector);
+    engine->setObjectName(QStringLiteral("engineLabel"));
+    inspectorLayout->addWidget(engine);
     splitter->addWidget(inspector);
-    splitter->setStretchFactor(0, 1);
-    splitter->setSizes({1100, 280});
-
-    setCentralWidget(splitter);
-    pageStatus_ = new QLabel(QStringLiteral("No document open"), this);
+    splitter->setStretchFactor(0,1);
+    splitter->setSizes({1180,320});
+    rootLayout->addWidget(splitter,1);
+    setCentralWidget(root);
+    pageStatus_ = new QLabel(QStringLiteral("Welcome to Parin"), this);
     statusBar()->addPermanentWidget(pageStatus_);
-    statusBar()->showMessage(QStringLiteral("Ready — native preview"));
-
+    statusBar()->showMessage(QStringLiteral("Persian Grand Edition  ·  Ready"));
+    musicPlayer_ = new QMediaPlayer(this);
+    audioOutput_ = new QAudioOutput(this);
+    musicPlayer_->setAudioOutput(audioOutput_);
+    connect(musicPlayer_, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error,const QString &error){ statusBar()->showMessage(QStringLiteral("Audio: %1").arg(error),6000); });
 }
-
+void MainWindow::refreshAppearance() {
+    const int hue = (themeIndex_ * 137) % 360;
+    const QColor accent = QColor::fromHsv(hue, 155 + ((themeIndex_/360)%2)*35 + (themeIndex_%4)*20, 205);
+    const QColor accentDark = accent.darker(145);
+    const QString a = accent.name();
+    const QString ad = accentDark.name();
+    const QString css = QStringLiteral(
+      "QMainWindow{background:#0b1220;color:#e9edf5;} QWidget{font-family:'Noto Sans','DejaVu Sans';font-size:10pt;color:#e9edf5;}"
+      "QFrame#topBar{background:#101b2d;border-bottom:1px solid #293b50;} QLabel#brandMark{color:%1;} QLabel#editionLabel{color:#8294aa;font-size:9pt;}"
+      "QToolBar#mainToolbar{background:#15243a;border:0;border-bottom:1px solid #30445e;padding:9px;spacing:7px;} QToolBar QToolButton{color:#e9edf5;padding:9px 12px;border-radius:8px;font-weight:600;} QToolBar QToolButton:hover{background:#263a55;color:white;}"
+      "QLineEdit,QComboBox,QSpinBox{background:#111d30;color:#eef3fa;border:1px solid #344a66;border-radius:8px;padding:9px;selection-background-color:%1;}"
+      "QFrame#inspector{background:#101b2d;border-left:1px solid #293b50;} QLabel#eyebrow{color:%1;font-weight:800;letter-spacing:2px;font-size:9pt;} QLabel#panelTitle{font-size:17pt;font-weight:800;color:#f4f0e8;} QLabel#documentInfo{background:#15243a;border:1px solid #2b405c;border-radius:12px;padding:14px;line-height:1.6;} QLabel#engineLabel{color:#8294aa;font-size:9pt;}"
+      "QGroupBox{border:1px solid #2c405a;border-radius:10px;margin-top:14px;padding:12px;color:%1;font-weight:800;} QGroupBox::title{subcontrol-origin:margin;left:12px;padding:0 5px;}"
+      "QPushButton{background:#1a2b43;color:#eaf0f8;border:1px solid #354b68;border-radius:9px;padding:9px 12px;} QPushButton:hover{background:%2;border-color:%1;} QPushButton#accentButton{background:%1;color:#07111e;font-weight:900;border:0;} QPushButton#quickButton{text-align:left;background:#14243a;border:0;padding:12px;} QPushButton#quickButton:hover{background:%2;}"
+      "QScrollArea{background:#202b3a;border:0;} QStatusBar{background:#101b2d;color:#9aabc0;border-top:1px solid #293b50;} QTabWidget::pane{border:1px solid #344a66;border-radius:8px;} QTabBar::tab{background:#15243a;padding:10px 16px;border-radius:6px;margin:3px;} QTabBar::tab:selected{background:%1;color:#07111e;} QSlider::groove:horizontal{height:6px;background:#344a66;border-radius:3px;} QSlider::handle:horizontal{background:%1;width:16px;margin:-5px 0;border-radius:8px;}"
+    ).arg(a,ad);
+    setStyleSheet(css);
+    if (brandMark_) brandMark_->setText(QStringLiteral("✦  PARIN"));
+}
+void MainWindow::applyTheme(int index) {
+    themeIndex_ = std::clamp(index,0,499);
+    QSettings().setValue(QStringLiteral("appearance/themeIndex"),themeIndex_);
+    refreshAppearance();
+}
+void MainWindow::showSettings() {
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Parin Settings Atelier"));
+    dialog.resize(720,560);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *tabs = new QTabWidget(&dialog);
+    auto *general = new QWidget(tabs); auto *generalForm = new QFormLayout(general);
+    auto *language = new QComboBox(general);
+    language->addItems({QStringLiteral("فارسی"),QStringLiteral("English"),QStringLiteral("Dansk"),QStringLiteral("Svenska"),QStringLiteral("العربية"),QStringLiteral("Norsk"),QStringLiteral("Deutsch"),QStringLiteral("Ελληνικά"),QStringLiteral("Українська"),QStringLiteral("Türkçe"),QStringLiteral("日本語"),QStringLiteral("Italiano"),QStringLiteral("한국어"),QStringLiteral("Монгол"),QStringLiteral("हिन्दी"),QStringLiteral("اردو")});
+    language->setCurrentText(language_==QStringLiteral("English")?QStringLiteral("English"):language_);
+    generalForm->addRow(QStringLiteral("Interface language"),language);
+    auto *animations = new QComboBox(general); animations->addItems({QStringLiteral("Subtle"),QStringLiteral("Balanced"),QStringLiteral("Expressive"),QStringLiteral("Reduced motion")});
+    generalForm->addRow(QStringLiteral("Motion profile"),animations);
+    auto *startup = new QComboBox(general); startup->addItems({QStringLiteral("New workspace"),QStringLiteral("Restore last session"),QStringLiteral("Open file dialog")});
+    generalForm->addRow(QStringLiteral("Startup behavior"),startup);
+    tabs->addTab(general,QStringLiteral("General"));
+    auto *appearance = new QWidget(tabs); auto *appearanceForm = new QFormLayout(appearance);
+    auto *theme = new QComboBox(appearance);
+    for(int i=1;i<=500;++i) theme->addItem(QStringLiteral("Theme %1  ·  %2°").arg(i,3,10,QChar('0')).arg(((i-1)*137)%360),i-1);
+    theme->setCurrentIndex(themeIndex_);
+    appearanceForm->addRow(QStringLiteral("500-color theme library"),theme);
+    auto *density = new QComboBox(appearance); density->addItems({QStringLiteral("Comfortable"),QStringLiteral("Compact"),QStringLiteral("Spacious")});
+    appearanceForm->addRow(QStringLiteral("Interface density"),density);
+    auto *accentPreview = new QLabel(QStringLiteral("Persian geometry  ·  Turquoise / lapis / saffron / midnight"),appearance);
+    appearanceForm->addRow(QStringLiteral("Visual identity"),accentPreview);
+    tabs->addTab(appearance,QStringLiteral("Appearance"));
+    auto *reader = new QWidget(tabs); auto *readerForm = new QFormLayout(reader);
+    auto *defaultZoom = new QComboBox(reader); defaultZoom->addItems({QStringLiteral("Fit page"),QStringLiteral("Fit width"),QStringLiteral("100%"),QStringLiteral("125%"),QStringLiteral("150%")});
+    readerForm->addRow(QStringLiteral("Default zoom"),defaultZoom);
+    auto *smooth = new QComboBox(reader); smooth->addItems({QStringLiteral("High quality"),QStringLiteral("Balanced"),QStringLiteral("Performance")});
+    readerForm->addRow(QStringLiteral("Rendering quality"),smooth);
+    auto *remember = new QComboBox(reader); remember->addItems({QStringLiteral("Remember last page"),QStringLiteral("Always start at page 1")});
+    readerForm->addRow(QStringLiteral("Reopen behavior"),remember);
+    tabs->addTab(reader,QStringLiteral("Reader"));
+    auto *audio = new QWidget(tabs); auto *audioForm = new QFormLayout(audio);
+    auto *volume = new QSlider(Qt::Horizontal,audio); volume->setRange(0,100); volume->setValue(qRound(audioOutput_->volume()*100));
+    audioForm->addRow(QStringLiteral("Lo-fi master volume"),volume);
+    auto *audioHint = new QLabel(QStringLiteral("Use your own local audio files. Parin does not bundle copyrighted music."),audio); audioHint->setWordWrap(true);
+    audioForm->addRow(QStringLiteral("Library"),audioHint);
+    tabs->addTab(audio,QStringLiteral("Audio"));
+    auto *advanced = new QWidget(tabs); auto *advancedForm = new QFormLayout(advanced);
+    auto *cache = new QComboBox(advanced); cache->addItems({QStringLiteral("128 MB"),QStringLiteral("256 MB"),QStringLiteral("512 MB"),QStringLiteral("1024 MB")});
+    advancedForm->addRow(QStringLiteral("Render cache limit"),cache);
+    auto *hardware = new QComboBox(advanced); hardware->addItems({QStringLiteral("Automatic"),QStringLiteral("Prefer quality"),QStringLiteral("Prefer performance")});
+    advancedForm->addRow(QStringLiteral("Performance profile"),hardware);
+    tabs->addTab(advanced,QStringLiteral("Advanced"));
+    layout->addWidget(tabs);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog);
+    layout->addWidget(buttons);
+    connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+    connect(buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);
+    connect(volume,&QSlider::valueChanged,this,[this](int v){audioOutput_->setVolume(v/100.0);});
+    connect(theme,qOverload<int>(&QComboBox::currentIndexChanged),this,&MainWindow::applyTheme);
+    if(dialog.exec()==QDialog::Accepted) {
+        language_=language->currentText();
+        const bool rtl = language_ == QStringLiteral("فارسی") || language_ == QStringLiteral("العربية") || language_ == QStringLiteral("اردو");
+        setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight);
+        QSettings settings(QStringLiteral("Parin"),QStringLiteral("Parin"));
+        settings.setValue(QStringLiteral("general/language"),language_);
+        settings.setValue(QStringLiteral("appearance/motionProfile"),animations->currentText());
+        settings.setValue(QStringLiteral("appearance/density"),density->currentText());
+        settings.setValue(QStringLiteral("reader/defaultZoom"),defaultZoom->currentText());
+        settings.setValue(QStringLiteral("reader/quality"),smooth->currentText());
+        settings.setValue(QStringLiteral("reader/rememberPage"),remember->currentText());
+        settings.setValue(QStringLiteral("performance/cacheLimit"),cache->currentText());
+        settings.setValue(QStringLiteral("performance/profile"),hardware->currentText());
+    }
+}
+void MainWindow::showMusicPanel() {
+    auto *dock = findChild<QDockWidget*>(QStringLiteral("lofiDock"));
+    if (!dock) {
+        dock = new QDockWidget(QStringLiteral("♫  LO-FI LISTENING ROOM"),this);
+        dock->setObjectName(QStringLiteral("lofiDock"));
+        dock->setAllowedAreas(Qt::LeftDockWidgetArea|Qt::RightDockWidgetArea|Qt::BottomDockWidgetArea);
+        auto *panel = new QWidget(dock); auto *layout = new QVBoxLayout(panel);
+        auto *title = new QLabel(QStringLiteral("MIDNIGHT STUDY CLUB"),panel); title->setObjectName(QStringLiteral("panelTitle"));
+        auto *sub = new QLabel(QStringLiteral("A quiet corner for deep focus. Play your own ambient and lo-fi tracks."),panel); sub->setWordWrap(true);
+        musicTrackLabel_ = new QLabel(QStringLiteral("No track selected"),panel);
+        auto *pick = new QPushButton(QStringLiteral("＋  Add local audio"),panel);
+        auto *controls = new QHBoxLayout();
+        auto *play = new QPushButton(QStringLiteral("▶  Play / Pause"),panel);
+        auto *stop = new QPushButton(QStringLiteral("■  Stop"),panel);
+        controls->addWidget(play); controls->addWidget(stop);
+        auto *vol = new QSlider(Qt::Horizontal,panel); vol->setRange(0,100); vol->setValue(55); audioOutput_->setVolume(0.55);
+        layout->addWidget(title); layout->addWidget(sub); layout->addWidget(musicTrackLabel_); layout->addWidget(pick); layout->addLayout(controls);
+        layout->addWidget(new QLabel(QStringLiteral("MASTER VOLUME"),panel)); layout->addWidget(vol); layout->addStretch();
+        connect(pick,&QPushButton::clicked,this,&MainWindow::chooseMusic);
+        connect(play,&QPushButton::clicked,this,&MainWindow::toggleMusic);
+        connect(stop,&QPushButton::clicked,musicPlayer_,&QMediaPlayer::stop);
+        connect(vol,&QSlider::valueChanged,this,[this](int v){audioOutput_->setVolume(v/100.0);});
+        dock->setWidget(panel); addDockWidget(Qt::RightDockWidgetArea,dock);
+        auto *effect = new QGraphicsOpacityEffect(dock); dock->setGraphicsEffect(effect);
+        auto *animation = new QPropertyAnimation(effect,"opacity",dock); animation->setDuration(260); animation->setStartValue(0.35); animation->setEndValue(1.0); animation->start(QAbstractAnimation::DeleteWhenStopped);
+    }
+    dock->show(); dock->raise();
+}
+void MainWindow::chooseMusic() {
+    const QString file = QFileDialog::getOpenFileName(this,QStringLiteral("Choose local audio"),QString(),QStringLiteral("Audio files (*.mp3 *.ogg *.wav *.flac *.m4a);;All files (*)"));
+    if(file.isEmpty()) return;
+    musicPlayer_->setSource(QUrl::fromLocalFile(file));
+    musicTrackLabel_->setText(QFileInfo(file).fileName());
+    musicPlayer_->play();
+}
+void MainWindow::toggleMusic() {
+    if(musicPlayer_->playbackState()==QMediaPlayer::PlayingState) musicPlayer_->pause();
+    else if(!musicPlayer_->source().isEmpty()) musicPlayer_->play();
+    else chooseMusic();
+}
+void MainWindow::showAbout() {
+    QMessageBox box(this);
+    box.setWindowTitle(QStringLiteral("About Parin"));
+    box.setTextFormat(Qt::RichText);
+    box.setText(QStringLiteral("<div style='font-size:22px;font-weight:800;color:#27c6b5'>✦ PARIN 10.2.01</div><p><b>Persian Grand Edition</b></p><p>این نرم‌افزار توسط <b>پــَــرین مشعلچیان</b><br/>(Parin Mashalchian) ساخته شده است.</p><p>Native PDF workspace · C++ / Qt · MuPDF · Rust</p><p>Crafted with a Persian design spirit.</p>"));
+    box.setInformativeText(QStringLiteral("Version 10.2.01"));
+    box.exec();
+}
 void MainWindow::openDocument()
 {
     const QString selectedPath = QFileDialog::getOpenFileName(

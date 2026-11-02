@@ -1,12 +1,12 @@
 [Desktop Entry]
-Name=Parin
-Name[fa]=پرین
-Comment=Native PDF workspace powered by MuPDF
-Comment[fa]=محیط بومی مدیریت و مطالعه فایل‌های PDF
+Name=Parin — Persian Grand Edition
+Name[fa]=پرین — ویرایش بزرگ ایرانی
+Comment=An elegant native PDF workspace with Persian-inspired design
+Comment[fa]=محیط حرفه‌ای مطالعه و مدیریت PDF با طراحی الهام‌گرفته از هنر ایرانی
 Exec=parin-native %U
 Icon=parin-pdf
 Terminal=false
 Type=Application
 Categories=Office;Viewer;Graphics;
 MimeType=application/pdf;
-StartupWMClass=ParinNative;
+StartupWMClass=ParinNative
