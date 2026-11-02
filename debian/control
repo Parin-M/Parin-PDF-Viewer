@@ -1,0 +1,31 @@
+Source: parin-pdf
+Section: graphics
+Priority: optional
+Maintainer: Parin
+Build-Depends:
+ cmake,
+ ninja-build,
+ pkg-config,
+ qt6-base-dev,
+ libmupdf-dev,
+ libfreetype-dev,
+ libharfbuzz-dev,
+ libmujs-dev,
+ libgumbo-dev,
+ libjpeg-dev,
+ libjbig2dec0-dev,
+ libopenjp2-7-dev,
+ liblcms2-dev,
+ libx11-dev,
+ libxext-dev,
+ zlib1g-dev,
+ dpkg-dev,
+ rustc,
+ cargo
+Standards-Version: 4.6.2
+
+Package: parin-pdf
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Parin native PDF workspace
+ Native C++/Qt PDF reader using the MuPDF C API and a Rust render cache.

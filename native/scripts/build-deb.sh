@@ -25,7 +25,7 @@ mkdir -p "$STAGE" "$PACKAGE_DIR"
 DESTDIR="$STAGE" cmake --install "$BUILD_DIR"
 
 mkdir -p "$STAGE/DEBIAN"
-DEPENDENCIES="$(dpkg-shlibdeps -O -e"$STAGE/usr/bin/parin-native" | sed -n 's/^shlibs:Depends=//p')"
+DEPENDENCIES="$(cd "$ROOT" && dpkg-shlibdeps -O -e"$STAGE/usr/bin/parin-native" | sed -n 's/^shlibs:Depends=//p')"
 if [[ -z "$DEPENDENCIES" ]]; then
   echo "Could not determine shared-library runtime dependencies." >&2
   exit 1
