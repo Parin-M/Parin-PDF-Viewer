@@ -4,7 +4,7 @@ A PDF workspace for Debian-based desktop systems.
 
 ## Edition V10.2 — Native MuPDF preview
 
-Parin 10.2 starts the native migration. The new `parin-native` application is built with C++20 and Qt 6, calls the MuPDF C API directly for PDF open/authentication/rendering/search, and uses a Rust static library for a bounded render cache. Its build, tests and Debian package use CMake, Ninja and Cargo; Python is not part of the native executable or native packaging pipeline.
+Parin 10.2 starts the native migration. The new `parin-native` application is built with C++20 and Qt 6, calls the MuPDF C API directly for PDF open/authentication/rendering/search, and uses a Rust static library for a bounded render cache. Its build and tests use CMake, Ninja and Cargo; Python is not part of the native executable or native packaging pipeline. Debian packages bundle the Qt runtime, Qt platform plugins and non-glibc shared-library dependencies under /opt/parin so users do not need to install Qt/MuPDF runtime packages separately. The host still supplies its base glibc and dynamic loader.
 
 This is an incremental native preview, not a complete feature-for-feature replacement yet. Annotations, editing and save, Undo/Redo, page organization, bookmarks, multi-document tabs, Research and Compare are still being migrated from the 10.1 reference implementation. See [the 10.2 migration plan](docs/V10_2_NATIVE_MIGRATION.md).
 

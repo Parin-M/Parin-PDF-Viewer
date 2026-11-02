@@ -71,6 +71,9 @@ target_link_libraries(parin-native PRIVATE
     parin_pdf_engine parin_native_core
 )
 target_compile_definitions(parin-native PRIVATE PARIN_APP_VERSION="${PROJECT_VERSION}")
+set_target_properties(parin-native PROPERTIES
+    INSTALL_RPATH "$ORIGIN/../lib"
+)
 
 if(BUILD_TESTING)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
@@ -86,6 +89,9 @@ if(BUILD_TESTING)
     set_tests_properties(parin-native-tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()
 
-install(TARGETS parin-native RUNTIME DESTINATION bin)
-install(FILES packaging/parin-pdf.desktop DESTINATION share/applications)
-install(FILES packaging/parin-pdf.svg DESTINATION share/icons/hicolor/scalable/apps)
+# Keep the application and its private runtime together under /opt/parin.
+install(TARGETS parin-native RUNTIME DESTINATION opt/parin/bin)
+install(FILES packaging/qt.conf DESTINATION opt/parin/bin)
+install(PROGRAMS packaging/parin-native-wrapper DESTINATION usr/bin RENAME parin-native)
+install(FILES packaging/parin-pdf.desktop DESTINATION usr/share/applications)
+install(FILES packaging/parin-pdf.svg DESTINATION usr/share/icons/hicolor/scalable/apps)

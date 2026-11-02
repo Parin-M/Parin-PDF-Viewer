@@ -7,6 +7,8 @@ Build-Depends:
  ninja-build,
  pkg-config,
  qt6-base-dev,
+ qt6-base-dev-tools,
+ qt6-qpa-plugins,
  libmupdf-dev,
  libfreetype-dev,
  libharfbuzz-dev,

@@ -20,9 +20,17 @@ The previous Python implementation remains in the repository as the 10.1 migrati
 - Zoom, fit width and fit page.
 - Search pages using MuPDF's page search API.
 - Cache raster output with a byte-bounded Rust LRU cache.
-- Build a native Debian package.
+- Build a native Debian package with private Qt runtime libraries and Qt platform plugins bundled under /opt/parin.
+- Recursively bundle non-glibc shared-library dependencies of the executable and Qt plugins.
+- Keep the package's Depends field limited to the host ABI requirements; validate it during package creation.
 
 The native reader currently labels the document area as a read-only preview. It does not yet replace the 10.1 feature set.
+
+## Runtime packaging model
+
+The Debian package installs the executable in /opt/parin/bin, private shared libraries in /opt/parin/lib and Qt plugins in /opt/parin/lib/qt6/plugins. The /usr/bin/parin-native launcher sets LD_LIBRARY_PATH and Qt plugin paths before starting the executable. The build script recursively inspects the executable and copied Qt plugins with ldd, bundles non-glibc libraries, and rejects unresolved dependencies or Qt/MuPDF runtime packages in the final Depends field.
+
+The system's glibc, ELF loader and kernel ABI are intentionally not bundled. These are host operating-system components and define the minimum supported Linux baseline. The remaining Depends field is generated from the actual binary and should normally be limited to this base ABI.
 
 ## Not yet migrated
 
