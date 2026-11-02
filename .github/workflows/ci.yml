@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   checks:
+    if: ${{ !startsWith(github.ref, 'refs/heads/feature/v10.2-native-mupdf') && !startsWith(github.head_ref, 'feature/v10.2-native-mupdf') }}
     runs-on: ubuntu-latest
     env:
       PYTHONPATH: src

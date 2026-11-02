@@ -1,5 +1,14 @@
 # Changelog
 
+## 10.2.0 — Native MuPDF migration preview
+
+- Add a C++20 and Qt 6 native desktop executable with no Python runtime dependency.
+- Integrate the MuPDF C API for PDF opening, password authentication, page counting, page dimensions, raster rendering and page search.
+- Add a Rust static library with a byte-bounded LRU cache for rendered page data.
+- Add CMake/Ninja/Cargo build files, native unit tests and a separate native CI workflow.
+- Add a native Debian package build script and document the AGPL licensing implications of the MuPDF dependency.
+- Keep the 10.1 Python application as a migration reference until the remaining editing, annotation, save, research and compare features are ported and tested.
+
 ## 10.1.0 — Precision Workspace and transactional document editing
 
 - Add a user-controlled Inspector panel with responsive visibility that preserves user preferences when the window is resized.

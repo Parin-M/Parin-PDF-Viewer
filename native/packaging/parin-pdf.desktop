@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=Parin
+Name[fa]=پرین
+Comment=Native PDF workspace powered by MuPDF
+Comment[fa]=محیط بومی مدیریت و مطالعه فایل‌های PDF
+Exec=parin-native %U
+Icon=parin-pdf
+Terminal=false
+Type=Application
+Categories=Office;Viewer;Graphics;
+MimeType=application/pdf;
+StartupWMClass=ParinNative;
