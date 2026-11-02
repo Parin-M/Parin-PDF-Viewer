@@ -64,11 +64,11 @@ parin_mupdf_document *parin_mupdf_open(
         if (fz_needs_password(handle->context, opened)) {
             const char *candidate_password = password != NULL ? password : "";
             if (!fz_authenticate_password(handle->context, opened, candidate_password))
-                fz_throw(handle->context, FZ_ERROR_ARGUMENT, "This PDF requires a valid password.");
+                fz_throw(handle->context, FZ_ERROR_GENERIC, "This PDF requires a valid password.");
         }
         handle->page_count = fz_count_pages(handle->context, opened);
         if (handle->page_count < 1)
-            fz_throw(handle->context, FZ_ERROR_FORMAT, "The PDF does not contain any pages.");
+            fz_throw(handle->context, FZ_ERROR_GENERIC, "The PDF does not contain any pages.");
     }
     fz_catch(handle->context) {
         set_error(error_buffer, error_buffer_size, fz_caught_message(handle->context));
@@ -124,7 +124,7 @@ int parin_mupdf_page_size(
         *width_points = bounds.x1 - bounds.x0;
         *height_points = bounds.y1 - bounds.y0;
         if (*width_points <= 0.0f || *height_points <= 0.0f)
-            fz_throw(document->context, FZ_ERROR_FORMAT, "The PDF page has invalid dimensions.");
+            fz_throw(document->context, FZ_ERROR_GENERIC, "The PDF page has invalid dimensions.");
     }
     fz_catch(document->context) {
         set_error(error_buffer, error_buffer_size, fz_caught_message(document->context));
@@ -177,7 +177,7 @@ int parin_mupdf_render_page(
             estimated_width > PARIN_MAX_RENDER_EDGE ||
             estimated_height > PARIN_MAX_RENDER_EDGE ||
             estimated_width * estimated_height > PARIN_MAX_RENDER_PIXELS) {
-            fz_throw(document->context, FZ_ERROR_ARGUMENT, "The requested page render exceeds the safe pixel budget.");
+            fz_throw(document->context, FZ_ERROR_GENERIC, "The requested page render exceeds the safe pixel budget.");
         }
         pixmap = fz_new_pixmap_from_page(document->context, page,
             fz_scale(scale, scale), fz_device_rgb(document->context), 0);
