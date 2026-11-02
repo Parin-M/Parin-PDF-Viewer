@@ -4,7 +4,16 @@ pkg_check_modules(MUPDF REQUIRED IMPORTED_TARGET mupdf)
 pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
 pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
 pkg_check_modules(MUJS REQUIRED IMPORTED_TARGET mujs)
-pkg_check_modules(GUMBO REQUIRED IMPORTED_TARGET gumbo)
+pkg_check_modules(GUMBO REQUIRED gumbo)
+# MuPDF's static archive references Gumbo. Link its static archive so the
+# resulting Parin package does not require a particular libgumbo SONAME/version
+# on the user's machine (for example libgumbo1 on older LTS releases).
+find_file(GUMBO_STATIC_LIBRARY
+    NAMES libgumbo.a
+    PATHS ${GUMBO_LIBRARY_DIRS}
+    NO_DEFAULT_PATH
+    REQUIRED
+)
 find_package(JPEG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -39,7 +48,7 @@ add_library(parin_pdf_engine STATIC
     src/pdf/mupdf_document.cpp
 )
 target_include_directories(parin_pdf_engine PUBLIC src)
-target_link_libraries(parin_pdf_engine PUBLIC PkgConfig::MUPDF ${MUPDF_THIRD_LIBRARY} PkgConfig::HARFBUZZ PkgConfig::FREETYPE PkgConfig::MUJS PkgConfig::GUMBO JPEG::JPEG ${JBIG2DEC_LIBRARY} ${OPENJPEG_LIBRARY} ${LCMS2_LIBRARY} ZLIB::ZLIB Qt6::Core Qt6::Gui)
+target_link_libraries(parin_pdf_engine PUBLIC PkgConfig::MUPDF ${MUPDF_THIRD_LIBRARY} PkgConfig::HARFBUZZ PkgConfig::FREETYPE PkgConfig::MUJS ${GUMBO_STATIC_LIBRARY} JPEG::JPEG ${JBIG2DEC_LIBRARY} ${OPENJPEG_LIBRARY} ${LCMS2_LIBRARY} ZLIB::ZLIB Qt6::Core Qt6::Gui)
 target_compile_options(parin_pdf_engine PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wpedantic>
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>

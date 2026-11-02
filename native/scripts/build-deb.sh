@@ -31,6 +31,13 @@ if [[ -z "$DEPENDENCIES" ]]; then
   exit 1
 fi
 
+# Gumbo is embedded from libgumbo.a; no libgumbo1/libgumbo2 runtime package
+# should be required by the distributed .deb.
+if grep -Eiq '(^|[, ])libgumbo[0-9]*([ ,(]|$)' <<<"$DEPENDENCIES"; then
+  echo "Unexpected dynamic Gumbo dependency: $DEPENDENCIES" >&2
+  exit 1
+fi
+
 cat > "$STAGE/DEBIAN/control" <<EOF
 Package: parin-pdf
 Version: $VERSION
@@ -57,6 +64,10 @@ MISSING_LIBRARIES="$(ldd "$STAGE/usr/bin/parin-native" | grep 'not found' || tru
 if [[ -n "$MISSING_LIBRARIES" ]]; then
   echo "The native executable has unresolved runtime libraries:" >&2
   echo "$MISSING_LIBRARIES" >&2
+  exit 1
+fi
+if ldd "$STAGE/usr/bin/parin-native" | grep -Eq 'libgumbo[0-9]*\\.so'; then
+  echo "Gumbo was not statically embedded; refusing to publish a non-portable package." >&2
   exit 1
 fi
 
