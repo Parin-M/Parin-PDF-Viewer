@@ -1,6 +1,7 @@
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MUPDF REQUIRED IMPORTED_TARGET mupdf)
+pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
 find_package(Threads REQUIRED)
 find_program(CARGO_EXECUTABLE cargo REQUIRED)
 
@@ -29,7 +30,7 @@ add_library(parin_pdf_engine STATIC
     src/pdf/mupdf_document.cpp
 )
 target_include_directories(parin_pdf_engine PUBLIC src)
-target_link_libraries(parin_pdf_engine PUBLIC PkgConfig::MUPDF Qt6::Core Qt6::Gui)
+target_link_libraries(parin_pdf_engine PUBLIC PkgConfig::MUPDF PkgConfig::HARFBUZZ Qt6::Core Qt6::Gui)
 target_compile_options(parin_pdf_engine PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wpedantic>
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>
