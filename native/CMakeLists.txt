@@ -4,8 +4,14 @@ pkg_check_modules(MUPDF REQUIRED IMPORTED_TARGET mupdf)
 pkg_check_modules(HARFBUZZ REQUIRED IMPORTED_TARGET harfbuzz)
 pkg_check_modules(FREETYPE REQUIRED IMPORTED_TARGET freetype2)
 pkg_check_modules(MUJS REQUIRED IMPORTED_TARGET mujs)
+pkg_check_modules(GUMBO REQUIRED IMPORTED_TARGET gumbo)
+find_package(JPEG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
+find_library(MUPDF_THIRD_LIBRARY NAMES mupdf-third REQUIRED)
+find_library(JBIG2DEC_LIBRARY NAMES jbig2dec REQUIRED)
+find_library(OPENJPEG_LIBRARY NAMES openjp2 REQUIRED)
+find_library(LCMS2_LIBRARY NAMES lcms2 REQUIRED)
 find_program(CARGO_EXECUTABLE cargo REQUIRED)
 
 set(PARIN_RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
@@ -33,7 +39,7 @@ add_library(parin_pdf_engine STATIC
     src/pdf/mupdf_document.cpp
 )
 target_include_directories(parin_pdf_engine PUBLIC src)
-target_link_libraries(parin_pdf_engine PUBLIC PkgConfig::MUPDF PkgConfig::HARFBUZZ PkgConfig::FREETYPE PkgConfig::MUJS ZLIB::ZLIB Qt6::Core Qt6::Gui)
+target_link_libraries(parin_pdf_engine PUBLIC PkgConfig::MUPDF ${MUPDF_THIRD_LIBRARY} PkgConfig::HARFBUZZ PkgConfig::FREETYPE PkgConfig::MUJS PkgConfig::GUMBO JPEG::JPEG ${JBIG2DEC_LIBRARY} ${OPENJPEG_LIBRARY} ${LCMS2_LIBRARY} ZLIB::ZLIB Qt6::Core Qt6::Gui)
 target_compile_options(parin_pdf_engine PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-Wall;-Wextra;-Wpedantic>
     $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>

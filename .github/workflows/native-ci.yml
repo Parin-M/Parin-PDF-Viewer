@@ -25,12 +25,15 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build pkg-config qt6-base-dev libmupdf-dev libfreetype-dev libharfbuzz-dev libmujs-dev dpkg-dev rustc cargo
+          sudo apt-get install -y cmake ninja-build pkg-config qt6-base-dev libmupdf-dev libfreetype-dev libharfbuzz-dev libmujs-dev libgumbo-dev libjpeg-dev libjbig2dec0-dev libopenjp2-7-dev liblcms2-dev libx11-dev libxext-dev dpkg-dev rustc cargo
 
       - name: Verify native dependencies
         run: |
           cmake --version
           pkg-config --modversion mupdf
+          pkg-config --modversion mujs
+          pkg-config --modversion gumbo
+          pkg-config --libs --static mupdf
           rustc --version
           cargo --version
 
