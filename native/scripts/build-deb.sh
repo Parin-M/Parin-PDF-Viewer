@@ -93,10 +93,17 @@ while (( INDEX < ${#SCAN_QUEUE[@]} )); do
     [[ -n "$SONAME" ]] || SONAME="$DEP_BASE"
     [[ "$SONAME" =~ $CORE_ABI_RE ]] && continue
 
+    # A library may already have its SONAME as its real filename
+    # (for example libgcc_s.so.1). Never create a symlink pointing to itself.
+    if [[ -L "$LIB_DIR/$REAL_BASE" ]]; then
+      rm -f "$LIB_DIR/$REAL_BASE"
+    fi
     if [[ ! -f "$LIB_DIR/$REAL_BASE" ]]; then
       cp -L "$DEP_REAL" "$LIB_DIR/$REAL_BASE"
     fi
-    ln -sfn "$REAL_BASE" "$LIB_DIR/$SONAME"
+    if [[ "$REAL_BASE" != "$SONAME" ]]; then
+      ln -sfn "$REAL_BASE" "$LIB_DIR/$SONAME"
+    fi
     SCAN_QUEUE+=("$LIB_DIR/$SONAME")
   done < <(
     LD_LIBRARY_PATH="$LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
