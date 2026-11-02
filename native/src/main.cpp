@@ -6,7 +6,7 @@
 int main(int argc, char *argv[]) {
  QApplication application(argc, argv);
  QCoreApplication::setApplicationName(QStringLiteral("Parin"));
- QCoreApplication::setApplicationDisplayName(QStringLiteral("Parin — Persian Grand Edition"));
+ QApplication::setApplicationDisplayName(QStringLiteral("Parin — Persian Grand Edition"));
  QCoreApplication::setApplicationVersion(QStringLiteral(PARIN_APP_VERSION));
  QCoreApplication::setOrganizationName(QStringLiteral("Parin"));
  QCoreApplication::setOrganizationDomain(QStringLiteral("parin.local"));
