@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-VERSION="$(sed -n 's/^    VERSION \([0-9.]*\)$/\1/p' "$ROOT/CMakeLists.txt" | head -n 1)"
+VERSION="$(sed -n 's/^[[:space:]]*project(ParinNative VERSION \([0-9.]*\).*/\1/p' "$ROOT/CMakeLists.txt" | head -n 1)"
 if [[ -z "$VERSION" ]]; then echo "Could not read application version." >&2; exit 1; fi
 BUILD_DIR="${PARIN_BUILD_DIR:-$ROOT/build/native}"
 STAGE="$ROOT/build/deb-root"
