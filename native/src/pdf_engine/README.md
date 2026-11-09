@@ -6,9 +6,14 @@ SPDX-License-Identifier: GPL-3.0-only
 
 This directory is the home of Parin's independently implemented PDF engine.
 
-The engine must remain independent of the current V10.2 MuPDF adapter and of UI toolkit headers. Public contracts belong in `include/parin/pdf`; implementation details belong under `src`.
+The engine must remain independent of the current V10.2 MuPDF adapter and of UI toolkit headers. Public contracts belong in `native/include/parin/pdf`; implementation details belong under this directory.
 
-Initial implementation order:
+## Current foundation
+
+- `engine_contract.cpp`: compiles the public, engine-neutral API contract.
+- `byte_reader.h`: bounded, non-owning byte reader. All read/skip/seek operations check bounds before advancing.
+
+## Implementation order
 
 1. byte source and bounded reader;
 2. lexer and primitive object parser;
